@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+src/pypelay/__init__.py
+src/pypelay/drawings.py
+src/pypelay/geom.py
+src/pypelay/prelim.py
+src/pypelay/stinger.py
+src/pypelay.egg-info/PKG-INFO
+src/pypelay.egg-info/SOURCES.txt
+src/pypelay.egg-info/dependency_links.txt
+src/pypelay.egg-info/requires.txt
+src/pypelay.egg-info/top_level.txt

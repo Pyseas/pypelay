@@ -1,8 +1,9 @@
 
-# from dataclasses import dataclass
 import OrcFxAPI as ofx
 import numpy as np
 import math
+
+__all__ = ['calc_path_coords', 'menger_curv', 'catenary_length']
 
 
 def calc_path_coords(model: ofx.Model,

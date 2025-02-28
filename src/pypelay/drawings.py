@@ -1,11 +1,14 @@
 
 import math
+import numpy as np
 import ezdxf
 from ezdxf.enums import TextEntityAlignment
 from ezdxf.math import offset_vertices_2d
 import OrcFxAPI as ofx
 from pathlib import Path
 from importlib.resources import files
+
+__all__ = ['write_dxf']
 
 
 def pin_hole(y: float, ymin: float, yincr: float) -> str:
@@ -18,17 +21,23 @@ def pin_hole(y: float, ymin: float, yincr: float) -> str:
     return f'{rl_hole}-{st_hole}'
 
 
-def write_dxf(datpath: Path) -> None:
+def write_dxf_ga(datpath: Path) -> None:
     ''' Text is all ROMANS, height 680, layer DIM
         Update stinger roller settings table: stinger angle, BOP height,
         stinger hole, roller hole. Add labels for all stinger rollers (e.g. SR #1)
         Angular dimensions between stinger sections'''
 
-    roller_names = ['BR5', 'BR6'] + [f'SR{i}' for i in range(1, 13)]
     model = ofx.Model(datpath)
+
+    stinger_ref = model['b6 stinger_ref']
+    vessel_name = stinger_ref.Connection[2:]
+
     all_names = [obj.Name for obj in model.objects]
 
-    dxfpath = Path(str(files('pipelay').joinpath('S1200_stcfg.dxf')))
+    # roller_names = ['BR5', 'BR6'] + [f'SR{i}' for i in range(1, 13)]
+    roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
+
+    dxfpath = Path(str(files('pypelay').joinpath(f'{vessel_name}_ga.dxf')))
     doc = ezdxf.readfile(dxfpath)
     msp = doc.modelspace()
 
@@ -66,9 +75,9 @@ def write_dxf(datpath: Path) -> None:
     for rname in roller_names:
         if f'b6 {rname}' not in all_names:
             continue
-        BR = False
+        barge_roller = False
         if rname[:1] == 'B':
-            BR = True
+            barge_roller = True
             block_name = 'barge_roller'
         else:
             block_name = 'stinger_roller'
@@ -83,7 +92,7 @@ def write_dxf(datpath: Path) -> None:
         glob_y = buoy.InitialY * 1000
         r3 = buoy.InitialRotation3
 
-        # Insert roller
+        # Insert roller block
         msp.add_blockref(
             block_name, (glob_x, glob_y),
             dxfattribs={'rotation': r3, 'layer': 'ROLLER'})
@@ -91,7 +100,7 @@ def write_dxf(datpath: Path) -> None:
         irlr = int(rname[2:])
 
         # Add text: table text and stinger roller labels
-        if BR:
+        if barge_roller:
             text_x, text_y = br_tbl_coords[irlr]
             msp.add_text(f'{y}', height=680,
                 dxfattribs={'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
@@ -144,4 +153,102 @@ def write_dxf(datpath: Path) -> None:
     # msp.add_lwpolyline(pipe_cl)
     msp.add_lwpolyline(bop)
 
-    doc.saveas(datpath.with_suffix('.dxf'))
+    outpath = datpath.parent / f'{datpath.stem}_ga.dxf'
+    doc.saveas(outpath)
+
+
+def write_dxf_rollers(datpath: Path) -> None:
+
+    model = ofx.Model(datpath)
+
+    stinger_ref = model['b6 stinger_ref']
+    vessel_name = stinger_ref.Connection[2:]
+
+    all_names = [obj.Name for obj in model.objects]
+    roller_names = [x[3:] for x in all_names if x[:5] == 'b6 SR']
+    nrlr = len(roller_names)
+
+    dxfpath = Path(str(files('pypelay').joinpath(f'{vessel_name}_rollers.dxf')))
+
+    doc = ezdxf.readfile(dxfpath)
+    msp = doc.modelspace()
+
+    base_points = np.zeros((nrlr, 2), dtype=float)
+    for ref in msp.query('INSERT'):
+        if ref.dxf.name[:8] == 'section_':
+            irlr = int(ref.dxf.name[8:]) - 1
+            if irlr < nrlr:
+                x, y, _ = ref.dxf.insert
+                base_points[irlr, :] = (x, y)
+
+    rl_insert = [0] * nrlr
+    st_insert = [0] * nrlr
+    txt = ''
+    for ref in msp.query('INSERT[name=="A3 - TAGG"]'):
+        x, y, _ = ref.dxf.insert
+        txt = ref.get_attrib('1').dxf.text
+        for irlr in range(nrlr):
+            xbase, ybase = base_points[irlr, :]
+            if (0 < x - xbase < 7500) and (0 < y - ybase < 10000):
+                if txt.isnumeric():
+                    st_insert[irlr] = ref
+                else:
+                    rl_insert[irlr] = ref
+                break
+
+    leaders = [0] * nrlr
+    for ref in msp.query('LEADER'):
+        x, y, _ = ref.vertices[0]
+        for irlr in range(nrlr):
+            xbase, ybase = base_points[irlr, :]
+            if (0 < x - xbase < 7500) and (0 < y - ybase < 10000):
+                leaders[irlr] = ref
+
+    for roller_name in roller_names:
+        irlr = int(roller_name[2:]) - 1
+        base_point = base_points[irlr]
+        oroller = model['b6 ' + roller_name]
+        ocn = model['cn ' + roller_name]
+        ymin = float(oroller.tags['ymin'])
+        yincr = float(oroller.tags['yincr'])
+        y = ocn.InFrameInitialY
+        # Insert roller
+        rlr_x = base_point[0]
+        rlr_y = base_point[1] + y * 1000
+        msp.add_blockref('SR1_front', (rlr_x, rlr_y))
+        # Update labels
+        pin = pin_hole(y, ymin, yincr)
+        rl_txt, st_txt = pin.split('-')
+        attrib = rl_insert[irlr].get_attrib('1')
+        attrib.dxf.text = rl_txt
+        attrib = st_insert[irlr].get_attrib('1')
+        attrib.dxf.text = st_txt
+        # Update leader arrow to point at hole
+        leader = leaders[irlr]
+        st_hole = int(st_txt) - 1
+        # Hard-coded values here ****
+        y_hole = (ymin * 1000 - 646) + 180 * st_hole
+        verts = leader.vertices
+        arw_x, arw_y, _ = verts[0]
+        verts[0] = (arw_x, base_point[1] + y_hole, 0)
+        leader.set_vertices(verts)
+        # Add value to table
+        if irlr < 7:
+            text_x, text_y = (29895.94, -43171.45)
+            text_y += -800 * irlr
+        else:
+            text_x, text_y = (97273.88, -24851.87)
+            text_y += -800 * (irlr - 7)
+        msp.add_text(f'{y:.3f}', height=340,
+            dxfattribs={'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
+            ).set_placement((text_x, text_y), align=TextEntityAlignment.MIDDLE_CENTER)
+
+    outpath = datpath.parent / f'{datpath.stem}_rollers.dxf'
+    doc.saveas(outpath)
+
+
+def write_dxf(datpath: Path) -> None:
+
+    write_dxf_ga(datpath)
+
+    write_dxf_rollers(datpath)

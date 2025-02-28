@@ -3,12 +3,12 @@ from dataclasses import dataclass, fields
 import OrcFxAPI as ofx
 from pathlib import Path
 from multiprocessing import Pool
-import numpy as np
 import pandas as pd
 import OrcFxAPI as ofx
-import sys
 
 PATH = Path('.')
+
+__all__ = ['make_sims', 'run_sims', 'postprocess', 'make_dat']
 
 
 @dataclass
@@ -23,6 +23,9 @@ class Sim:
     seed: int
     t_origin: float
     duration: float
+    cspd: float
+    cdirn: float
+    cprofile: int
     run_sim: bool = True
     save_sim: bool = False
     save_dat: bool = False
@@ -47,7 +50,7 @@ def aggfuncs(df: pd.DataFrame) -> dict:
     return aggs
 
 
-def _get_header() -> list[str]:
+def get_header() -> list[str]:
     # Results column names
     header = ['lc']
     for var in ['layback', 'susp_length', 'top_tension',
@@ -68,6 +71,7 @@ def make_sims(inpath: Path, base_filename: str) -> None:
 
     df0 = pd.read_excel(inpath, sheet_name='waves')
     df1 = pd.read_excel(inpath, sheet_name='hs_dirn')
+    df2 = pd.read_excel(inpath, sheet_name='current', header=[0, 1])
 
     df0['duration'] = df0['before'] + df0['after']
     drop_cols = [
@@ -75,19 +79,43 @@ def make_sims(inpath: Path, base_filename: str) -> None:
         'before', 'after', 'numseed', 'hmax', 'thmax', 'cross']
     df0.drop(drop_cols, axis=1, inplace=True)
 
+    dfs = []
+    for hs in df1['hs'].dropna():
+        df1['hs'] = hs
+        dfs.append(df1.copy())
+    df1 = pd.concat(dfs, ignore_index=True)
+
     df0['join'] = 0
     df1['join'] = 0
 
-    df2 = df0.merge(df1, on='join', how='outer')
-    df2['base_filename'] = base_filename
-    df2.drop(['join'], axis=1, inplace=True)
-    df2['lc'] = range(1, len(df2.index) + 1)
+    sims = df0.merge(df1, on='join', how='outer')
+    sims['base_filename'] = base_filename
+    sims.drop(['join'], axis=1, inplace=True)
+    sims['lc'] = range(1, len(sims.index) + 1)
     cols = ['lc', 'base_filename', 'hs', 'tp', 'gamma', 'dirn',
             'dirn_name', 'seed', 't_origin', 'duration']
-    df2 = df2[cols]
+    sims = sims[cols]
+
+    for var in ['cspd', 'cdirn', 'cprofile']:
+        sims[var] = 0.0
+
+    dfs = [sims.copy()]
+    df3 = df2['overall'].dropna()
+    if len(df3.index) > 0:
+        # write current_profiles to csv
+        df2.drop([('overall', 'dirn'), ('overall', 'profile')], axis=1, inplace=True)
+        df2.to_csv(PATH / 'current_profiles.csv')
+        for row in df3.itertuples():
+            sims['cspd'] = 1.0
+            sims['cdirn'] = row.dirn
+            sims['cprofile'] = row.profile
+            dfs.append(sims.copy())
+
+    sims = pd.concat(dfs, ignore_index=True)
+    sims['lc'] = range(1, len(sims.index) + 1)
 
     outpath = PATH / 'sims.xlsx'
-    df2.to_excel(outpath, index=False)
+    sims.to_excel(outpath, index=False)
 
 
 def fix_rollers(datpath: Path) -> None:
@@ -126,8 +154,8 @@ def fix_rollers(datpath: Path) -> None:
     model.SaveData(outpath)
 
 
-def _get_roller_loads(roller_names: list[str],
-                      model: ofx.Model) -> tuple[float, float]:
+def get_roller_loads(roller_names: list[str],
+                     model: ofx.Model) -> tuple[float, float]:
 
     static = []
     dyn = []
@@ -186,6 +214,8 @@ def run_orca(sim: Sim) -> None:
     vtype = model[ovessel.VesselType]
 
     env = model.environment
+
+    # Wave
     env.SelectedWaveTrain = 'Wave1'
     env.WaveHs = sim.hs
     env.WaveGamma = sim.gamma
@@ -194,6 +224,16 @@ def run_orca(sim: Sim) -> None:
     env.WaveSeed = sim.seed
     env.WaveOriginX = ovessel.InitialX - vtype.Length / 2
     env.WaveTimeOrigin = sim.t_origin
+
+    # Current
+    if sim.cspd == 1.0:
+        env.RefCurrentSpeed = sim.cspd
+        env.RefCurrentDirection = sim.cdirn
+        df = pd.read_csv(PATH / 'current_profiles.csv', header=[0, 1])
+        cprofile = df[f'profile {sim.cprofile}'].dropna()
+        env.NumberOfCurrentLevels = len(cprofile.index)
+        env.CurrentDepth = cprofile['depth']
+        env.CurrentFactor = cprofile['speed']
 
     model.general.StageDuration[1] = sim.duration
 
@@ -266,7 +306,7 @@ def run_orca(sim: Sim) -> None:
     for roller_type in 'BR', 'SR':
         roller_names = [x[3:] for x in all_names
                         if x[:5] == f'b6 {roller_type}']
-        static, dyn = _get_roller_loads(roller_names, model)
+        static, dyn = get_roller_loads(roller_names, model)
         results += [static, dyn]
 
     # CODE CHECKS -----------------------------
@@ -299,26 +339,7 @@ def run_orca(sim: Sim) -> None:
     # model.SaveSimulation('{0}\\sims\\LC_{1:05d}.sim'.format(folder, lc))
 
 
-def _make_folder(folder_name: str) -> bool:
-    # Create new folder if folder doesn't exist
-    # Prompt user to delete contents if folder does exist
-    success = True
-    fpath = PATH / folder_name
-    if fpath.exists():
-        response = input(f'{folder_name} folder already exists, delete contents (y/n)? : ')
-        if response.lower() == 'y':
-            files = fpath.glob('*.*')
-            for file in files:
-                file.unlink()
-        else:
-            success = False
-    else:
-        fpath.mkdir()
-
-    return success
-
-
-def _combine_results() -> None:
+def combine_results() -> None:
 
     txtpaths = (PATH / 'sims').glob('*.txt')
     res = []
@@ -327,7 +348,7 @@ def _combine_results() -> None:
             for line in f:
                 res.append([float(x) for x in line.split()])
 
-    header = _get_header()
+    header = get_header()
     df = pd.DataFrame(res, columns=header)
 
     sims = pd.read_excel(PATH / 'sims.xlsx')
@@ -364,7 +385,7 @@ def run_sims(ncpu: int, rerun: list[int] | None = None):
     with Pool(ncpu) as p:
         p.map(run_orca, sims, chunksize=1)
 
-    _combine_results()
+    combine_results()
 
 
 def result_summary(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:

@@ -4,15 +4,18 @@ import pandas as pd
 from multiprocessing import Pool
 import OrcFxAPI as ofx
 from dataclasses import astuple
-# from importlib.resources import files
 from pathlib import Path
 import matplotlib.pyplot as plt
 plt.style.use('ggplot')
 
-from .geom import *
-from .stinger import *
+from .geom import calc_path_coords
+from .stinger import (get_base_case, StingerSetupArgs, stinger_setup,
+                      get_roller_heights, Vessel)
 
 PATH = Path('.')
+
+__all__ = ['valid_configs_to_df', 'solve_configs', 'combine_configs',
+           'sort_configs', 'plot_configs']
 
 
 def plot_configs(num_section):

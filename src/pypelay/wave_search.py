@@ -3,7 +3,6 @@ import OrcFxAPI as ofx
 import math
 import numpy as np
 import pandas as pd
-from openpyxl import load_workbook
 from copy import deepcopy
 from multiprocessing import Pool
 from dataclasses import dataclass, fields, asdict, replace
@@ -14,6 +13,8 @@ import matplotlib.pyplot as plt
 plt.style.use('ggplot')
 
 PATH = Path('.')
+
+__all__ = ['wave_search']
 
 
 @dataclass
@@ -52,19 +53,7 @@ class Sim:
         return '\t'.join(x.name for x in fields(self))
 
 
-def get_wave_inputs(xlpath: Path) -> list[Sim]:
-
-    df = pd.read_excel(xlpath)
-    print(df)
-
-    sims = []
-    for dic in df.to_dict('records'):
-        sims.append(Sim(**dic))
-
-    return sims
-
-
-def _combine_results(xlpath: Path) -> None:
+def combine_results(xlpath: Path) -> None:
 
     txtpaths = (PATH / 'waves').glob('*.txt')
 
@@ -256,7 +245,7 @@ def wavescreen(sim: Sim):
         f.write(outstr)
 
 
-def _make_folders(folder_names: list[str]) -> bool:
+def make_folders(folder_names: list[str]) -> bool:
     # Create new folder if folder doesn't exist
     # Prompt user to delete contents if folder does exist
     success = True
@@ -279,20 +268,25 @@ def _make_folders(folder_names: list[str]) -> bool:
 
 def wave_search(xlpath: Path, ncpu: int=8) -> None:
 
-    inputs = get_wave_inputs(xlpath)
-    nsim = len(inputs)
+    df = pd.read_excel(xlpath)
+
+    sims = []
+    for dic in df.to_dict('records'):
+        sims.append(Sim(**dic))
+
+    nsim = len(sims)
 
     print('Starting {0} sims with {1} processors'.format(nsim, ncpu))
 
-    success = _make_folders(['waves'])
+    success = make_folders(['waves'])
     if not success:
         return
 
     with Pool(ncpu) as p:
-        p.map(wavescreen, inputs)
+        p.map(wavescreen, sims)
 
     # Read results files and write to spreadsheet
-    _combine_results(xlpath)
+    combine_results(xlpath)
 
 
 def main():

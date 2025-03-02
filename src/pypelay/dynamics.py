@@ -118,42 +118,6 @@ def make_sims(inpath: Path, base_filename: str) -> None:
     sims.to_excel(outpath, index=False)
 
 
-def fix_rollers(datpath: Path) -> None:
-
-    model = ofx.Model(datpath)
-
-    model.CalculateStatics()
-
-    all_names = [obj.Name for obj in model.objects]
-
-    roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
-
-    # Determine if roller angle needs to be set to r3 based on roller load
-    adjust_angle = {}
-    for rname in roller_names:
-        oroller = model[f'b6 {rname}']
-        nsup = oroller.NumberOfSupports
-        for isup in range(nsup):
-            objx = ofx.oeSupport(isup + 1)
-            sup_load = oroller.StaticResult('Support reaction force', objx)
-            adjust_angle[rname] = False
-            if sup_load < 0.1:
-                adjust_angle[rname] = True
-                break
-
-    for rname in roller_names:
-        oroller = model[f'b6 {rname}']
-        ocn = model[f'cn {rname}']
-        oroller.Connection = ocn.Connection
-        if adjust_angle[rname]:
-            r3 = float(oroller.tags['r3'])
-            oroller.InitialRotation3 = r3
-        model.DestroyObject(ocn)
-
-    outpath = datpath.parent / f'{datpath.stem}_fixed.dat'
-    model.SaveData(outpath)
-
-
 def get_roller_loads(roller_names: list[str],
                      model: ofx.Model) -> tuple[float, float]:
 
@@ -269,7 +233,7 @@ def run_orca(sim: Sim) -> None:
     last_roller = model['b6 ' + roller_names[-1]]
     last_roller_arc = float(last_roller.tags['arc']) / 1000
 
-    # Layback
+    # Layback from transom
     s_lay = line.StaticResult('Layback', ofx.oeEndA) - line.EndAX
     d_lay = line.TimeHistory('Layback', 1, ofx.oeEndA) - line.EndAX
     results += [s_lay, d_lay.max(), d_lay.min()]

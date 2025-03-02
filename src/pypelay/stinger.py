@@ -317,6 +317,11 @@ def select_radius(vessel: Vessel, num_section: int,
     linetypes = [obj.Name for obj in pmodel.objects if 
                     obj.typeName == 'Line type']
     linetype = pmodel[linetypes[0]]
+    # Check for stress-strain curve
+    if isinstance(linetype.E, str):
+        stress_strain = pmodel[linetype.E]
+        clone = stress_strain.CreateClone(name=stress_strain.Name,
+                                          model=vmodel)
     clone = linetype.CreateClone(name=linetype.Name, model=vmodel)
     line = vmodel.CreateObject(ofx.ObjectType.Line, name='Line1')
 
@@ -862,6 +867,8 @@ def adjust_top_tension(inpath: Path, outpath: Path, tension) -> None:
 
     model.SaveData(outpath)
 
+    prep_for_dyn(outpath)
+
     res = get_setup_results(model, outpath)
 
     print(res)
@@ -1003,6 +1010,10 @@ def get_base_case(vessel: Vessel, stinger_radius: float,
     pmodel = ofx.Model(datpath)
     linetypes = [obj.Name for obj in pmodel.objects if obj.typeName == 'Line type']
     linetype = pmodel[linetypes[0]]
+    # Check for stress-strain curve
+    if isinstance(linetype.E, str):
+        stress_strain = pmodel[linetype.E]
+        clone = stress_strain.CreateClone(name=stress_strain.Name, model=model)
     clone = linetype.CreateClone(name=linetype.Name, model=model)
 
     # Remove stinger sections

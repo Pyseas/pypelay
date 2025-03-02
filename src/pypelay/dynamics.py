@@ -5,16 +5,18 @@ from pathlib import Path
 from multiprocessing import Pool
 import pandas as pd
 import OrcFxAPI as ofx
+from pypelay.stinger import get_options
 
 PATH = Path('.')
 
-__all__ = ['make_sims', 'run_sims', 'postprocess', 'make_dat']
+__all__ = ['make_sims', 'run_sims', 'postprocess', 'make_dat', 'combine_results']
 
 
 @dataclass
 class Sim:
-    base_filename: str
     lc: int
+    base_filename: str
+    stinger_tip_len: float
     hs: float
     tp: float
     gamma: float
@@ -53,14 +55,19 @@ def aggfuncs(df: pd.DataFrame) -> dict:
 def get_header() -> list[str]:
     # Results column names
     header = ['lc']
-    for var in ['layback', 'susp_length', 'top_tension',
-                'tdp_tension', 'tip_clearance']:
+    for var in ['layback', 'scope', 'pipe_gain',
+                'top_tension', 'tdp_tension', 'tip_clearance']:
         for res in ['static', 'max', 'min']:
             header.append(f'{var} {res}')
 
+    header += ['seabed_clearance static', 'seabed_clearance min']
+
     for var in ['barge_roller_load', 'stinger_roller_load',
-                'f101a_overbend', 'f101a_tip', 'f101a_sag',
-                'f101b_overbend', 'f101b_tip', 'f101b_sag']:
+                'strain_overbend', 'stress_tip', 'stress_sag',
+                'f101a_overbend_dcc', 'f101a_overbend_lcc',
+                'f101a_tip', 'f101a_sag',
+                'f101b_overbend_dcc', 'f101b_overbend_lcc',
+                'f101b_tip', 'f101b_sag']:
         for res in ['static', 'max']:
             header.append(f'{var} {res}')
 
@@ -68,6 +75,8 @@ def get_header() -> list[str]:
 
 
 def make_sims(inpath: Path, base_filename: str) -> None:
+
+    opts = get_options()
 
     df0 = pd.read_excel(inpath, sheet_name='waves')
     df1 = pd.read_excel(inpath, sheet_name='hs_dirn')
@@ -90,10 +99,12 @@ def make_sims(inpath: Path, base_filename: str) -> None:
 
     sims = df0.merge(df1, on='join', how='outer')
     sims['base_filename'] = base_filename
+    sims['stinger_tip_len'] = opts.tip_len
     sims.drop(['join'], axis=1, inplace=True)
     sims['lc'] = range(1, len(sims.index) + 1)
-    cols = ['lc', 'base_filename', 'hs', 'tp', 'gamma', 'dirn',
-            'dirn_name', 'seed', 't_origin', 'duration']
+    cols = ['lc', 'base_filename', 'stinger_tip_len',
+            'hs', 'tp', 'gamma', 'dirn', 'dirn_name',
+            'seed', 't_origin', 'duration']
     sims = sims[cols]
 
     for var in ['cspd', 'cdirn', 'cprofile']:
@@ -233,16 +244,28 @@ def run_orca(sim: Sim) -> None:
     last_roller = model['b6 ' + roller_names[-1]]
     last_roller_arc = float(last_roller.tags['arc']) / 1000
 
-    # Layback from transom
-    s_lay = line.StaticResult('Layback', ofx.oeEndA) - line.EndAX
-    d_lay = line.TimeHistory('Layback', 1, ofx.oeEndA) - line.EndAX
-    results += [s_lay, d_lay.max(), d_lay.min()]
+    # Layback, scope, gain (relative to bead stall)
+    firing_line = model['b6 firing_line']
+    beadstall = float(firing_line.tags['bead stall'])
+    s_bstall_x = firing_line.StaticResult('X', ofx.oeBuoy(beadstall, 0, 0))
+    d_bstall_x = firing_line.TimeHistory('X', 1, ofx.oeBuoy(beadstall, 0, 0))
+    s_tdp_x = line.StaticResult('X', ofx.oeTouchdown)
+    d_tdp_x = line.TimeHistory('X', 1, ofx.oeTouchdown)
+    s_enda_x = line.StaticResult('X', ofx.oeEndA)
+    d_enda_x = line.TimeHistory('X', 1, ofx.oeEndA)
+    s_tdp_arc = line.StaticResult('Arc length', ofx.oeTouchdown)
+    d_tdp_arc = line.TimeHistory('Arc length', 1, ofx.oeTouchdown)
 
-    # Suspended length from transom
-    var, objx = 'Arc length', ofx.oeTouchdown
-    s_len = line.StaticResult(var, objx) - line.EndAX
-    d_len = line.TimeHistory(var, 1, objx) - line.EndAX
-    results += [s_len, d_len.max(), d_len.min()]
+    s_layback = float(s_bstall_x - s_tdp_x)
+    d_layback = d_bstall_x - d_tdp_x
+    s_scope = float(s_tdp_arc + (s_bstall_x - s_enda_x))
+    d_scope = d_tdp_arc + (d_bstall_x - d_enda_x)
+    s_gain = s_scope - s_layback
+    d_gain = d_scope - d_layback
+
+    results += [s_layback, d_layback.max(), d_layback.min()]
+    results += [s_scope, d_scope.max(), d_scope.min()]
+    results += [s_gain, d_gain.max(), d_gain.min()]
 
     # Top tension
     var, objx = 'Effective Tension', ofx.oeEndA
@@ -266,6 +289,19 @@ def run_orca(sim: Sim) -> None:
     dyn = (clr1 + clr2) / 2
     results += [static, dyn.max(), dyn.min()]
 
+    # Stinger seabed clearance
+    depth = model.environment.WaterDepth
+    stinger_ref = model['b6 stinger_ref']
+    num_section = int(stinger_ref.tags['num_section'])
+    last_section = model[f'b6 stinger_{num_section}']
+    vertx = min(last_section.VertexX)
+    objx = ofx.oeBuoy(vertx, 0, 0)
+    s_draft = float(last_section.StaticResult('Z', objx)) * -1
+    d_draft = last_section.TimeHistory('Z', 1, objx) * -1
+    s_clearance = depth - s_draft
+    d_clearance = depth - d_draft
+    results += [s_clearance, d_clearance.min()]
+
     # Roller loads
     for roller_type in 'BR', 'SR':
         roller_names = [x[3:] for x in all_names
@@ -273,23 +309,40 @@ def run_orca(sim: Sim) -> None:
         static, dyn = get_roller_loads(roller_names, model)
         results += [static, dyn]
 
-    # CODE CHECKS -----------------------------
+    # PIPE STRESS, STRAIN and CODE CHECKS -----------------------------
     # Functional / Environmental
     # a -> 1.2 / 0.7
     # b -> 1.1 / 1.3
     codechecks = model['Code checks']
     ltype.DNVSTF101AlphaPm = 1.0
 
-    arc_ob = ofx.arSpecifiedArclengths(0, last_roller_arc - 10)
-    arc_st = ofx.arSpecifiedArclengths(last_roller_arc - 10,
-                                       last_roller_arc + 10)
-    arc_sb = ofx.arSpecifiedArclengths(last_roller_arc + 10,
+    tip_len = sim.stinger_tip_len / 2
+    arc_ob = ofx.arSpecifiedArclengths(0, last_roller_arc - tip_len)
+    arc_st = ofx.arSpecifiedArclengths(last_roller_arc - tip_len,
+                                       last_roller_arc + tip_len)
+    arc_sb = ofx.arSpecifiedArclengths(last_roller_arc + tip_len,
                                        line_length)
+
+    # Stress and strain
+    var = 'Worst ZZ strain'
+    static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
+    dyn = line.RangeGraph(var, 1, None, arc_ob).Max
+    results += [static.max(), dyn.max()]
+    var = 'Max von Mises stress'
+    for arc in [arc_st, arc_sb]:
+        static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
+        dyn = line.RangeGraph(var, 1, None, arc).Max
+        results += [static.max(), dyn.max()]
 
     for gamma_f, gamma_e in [[1.2, 0.7], [1.1, 1.3]]:
         codechecks.DNVSTF101GammaF = gamma_f
         codechecks.DNVSTF101GammaE = gamma_e
-        var = 'DNV OS F101 load controlled'
+        var = 'DNV ST F101 disp. controlled'
+        codechecks.DNVSTF101GammaC = 0.8
+        static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
+        dyn = line.RangeGraph(var, 1, None, arc_ob).Max
+        results += [static.max(), dyn.max()]
+        var = 'DNV ST F101 load controlled'
         for arc, gamma_c in [[arc_ob, 0.8], [arc_st, 1.0], [arc_sb, 1.0]]:
             codechecks.DNVSTF101GammaC = gamma_c
             static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
@@ -369,10 +422,8 @@ def result_summary(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     res0 = df[cols_static]
     res0.columns = cols_dyn
     res0.loc[:, 'dirn_name'] = 'static'
-
     res1 = df[cols_dyn]
     # res3.columns = ['dirn_name'] + cols
-
     res2 = pd.concat((res0, res1)).drop_duplicates()
 
     return res2
@@ -404,30 +455,35 @@ def postprocess() -> None:
     res1.reset_index(inplace=True)
     # res1.to_excel(PATH / 'summary_2.xlsx', index=False)
 
-    # Layback and tensions
-    cols = ['layback', 'susp_length', 'top_tension', 'tdp_tension']
+    # Layback and clearances
+    cols = ['layback', 'scope', 'pipe_gain',
+            'tip_clearance', 'seabed_clearance']
     res2 = result_summary(res1, cols)
-    # res2.to_excel(PATH / 'layback.xlsx', index=False)
 
-    # Tip clearance, roller loads
-    cols = ['tip_clearance', 'barge_roller_load', 'stinger_roller_load']
+    # Tensions and roller loads
+    cols = ['top_tension', 'tdp_tension', 'barge_roller_load',
+            'stinger_roller_load']
     res3 = result_summary(res1, cols)
-    # res3.to_excel(PATH / 'roller_loads.xlsx', index=False)
 
-    # F101 results summary
+    # Stress and strain
+    cols = ['strain_overbend', 'stress_tip', 'stress_sag']
+    res4 = result_summary(res1, cols)
+
+    # F101
     cols = []
     for lc in ['a', 'b']:
-        for loc in ['overbend', 'tip', 'sag']:
+        for loc in ['overbend_dcc', 'overbend_lcc', 'tip', 'sag']:
             cols.append(f'f101{lc}_{loc}')
-    res4 = result_summary(res1, cols)
+    res5 = result_summary(res1, cols)
     # res4.to_excel(PATH / 'f101.xlsx', index=False)
 
-    with pd.ExcelWriter(PATH / 'summary.xlsx') as writer:
+    with pd.ExcelWriter(PATH / 'dyn_summary.xlsx') as writer:
         res0.to_excel(writer, sheet_name='Avg 5 seeds', index=False)
         res1.to_excel(writer, sheet_name='Group by dirn', index=False)
-        res2.to_excel(writer, sheet_name='Layback, tension', index=False)
-        res3.to_excel(writer, sheet_name='Roller loads', index=False)
-        res4.to_excel(writer, sheet_name='F101', index=False)
+        res2.to_excel(writer, sheet_name='Layback, clearance', index=False)
+        res3.to_excel(writer, sheet_name='Tensions, roller loads', index=False)
+        res4.to_excel(writer, sheet_name='Stress and strain', index=False)
+        res5.to_excel(writer, sheet_name='F101', index=False)
 
 def main():
     pass

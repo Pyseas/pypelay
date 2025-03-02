@@ -1,0 +1,46 @@
+site_name: pypelay
+theme:
+  name: material
+  features:
+    # navigation.tabs
+    # navigation.sections
+    # navigation.top
+    # navigation.expand
+    # toc.integrate
+  palette:
+    - scheme: default
+      toggle: 
+        icon: material/brightness-7
+        name: Switch to dark mode
+      primary: teal
+      accent: purple
+    - scheme: slate
+      toggle: 
+        icon: material/brightness-4
+        name: Switch to light mode
+      primary: teal
+      accent: lime
+nav:
+  - Introduction: index.md
+  - make_new_model: make_new_model.md
+  - piping_loads: piping_loads.md
+  - soil_springs: soil_springs.md
+  - Reference: ref.md
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+plugins:
+- search
+- mkdocstrings:
+    handlers:
+      python:
+        options:
+          show_source: false
+          show_root_heading: true
+          docstring_section_style: list
+          heading_level: 2

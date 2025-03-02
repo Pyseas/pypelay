@@ -275,7 +275,7 @@ def set_radius(vessel: Vessel, num_section: int, radius: float,
                outpath: Path) -> None:
 
     radius *= 1000
-    xlpath = files('pypelay') / (f'{vessel.name}_configs.xlsx')
+    xlpath = files('pypelay') / f'{vessel.name}_configs.xlsx'
     df = pd.read_excel(xlpath)
 
     df = df[(df['num_section'] == num_section) & 
@@ -312,7 +312,7 @@ def select_radius(vessel: Vessel, num_section: int,
     vmodel.environment.Depth = water_depth
 
     # Fetch pipe linetype from pipe dat file
-    datpath = PATH.joinpath('pipe.dat')
+    datpath = PATH / 'pipe.dat'
     pmodel = ofx.Model(datpath)  # Pipe model
     linetypes = [obj.Name for obj in pmodel.objects if 
                     obj.typeName == 'Line type']
@@ -651,6 +651,9 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
 
     model.SaveData(sim.outpath)
 
+    # Create dat file suitable for running dynamics (vessel )
+    prep_for_dyn(sim.outpath)
+
     res = get_setup_results(model, sim.outpath)
 
     # If running all 18000 configs need to delete dat files
@@ -660,6 +663,54 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     print(f'Radius {radius / 1000:.0f}m : {res}')
 
     return res
+
+
+def prep_for_dyn(datpath: Path) -> None:
+    ''' 
+    Prepare model for dynamic analysis:
+     - Set roller orientations, delete constraints
+     - Switch off vessel 3 DOF (so that current doesn't effect position)
+    '''
+    model = ofx.Model(datpath)
+
+    fix_rollers(model)
+
+    ovessel = [obj for obj in model.objects if obj.typeName == 'Vessel'][0]
+    ovessel.IncludedInStatics = 'None'
+
+    outpath = datpath.parent / f'{datpath.stem}_dyn.dat'
+    model.SaveData(outpath)
+
+
+def fix_rollers(model: ofx.Model) -> None:
+
+    model.CalculateStatics()
+
+    all_names = [obj.Name for obj in model.objects]
+
+    roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
+
+    # Determine if roller angle needs to be set to r3 based on roller load
+    adjust_angle = {}
+    for rname in roller_names:
+        oroller = model[f'b6 {rname}']
+        nsup = oroller.NumberOfSupports
+        for isup in range(nsup):
+            objx = ofx.oeSupport(isup + 1)
+            sup_load = oroller.StaticResult('Support reaction force', objx)
+            adjust_angle[rname] = False
+            if sup_load < 0.1:
+                adjust_angle[rname] = True
+                break
+
+    for rname in roller_names:
+        oroller = model[f'b6 {rname}']
+        ocn = model[f'cn {rname}']
+        oroller.Connection = ocn.Connection
+        if adjust_angle[rname]:
+            r3 = float(oroller.tags['r3'])
+            oroller.InitialRotation3 = r3
+        model.DestroyObject(ocn)
 
  
 def add_deadband_winch(model: ofx.Model, opts: StingerSetupOptions) -> None:
@@ -944,11 +995,11 @@ def get_base_case(vessel: Vessel, stinger_radius: float,
     # - Delete stinger sections,
     # - update stinger_ref tags (radius, num_section, path length)
 
-    datpath = Path(str(files('pypelay').joinpath(f'{vessel.name}.dat')))
+    datpath = Path(str(files('pypelay') / f'{vessel.name}.dat'))
     model = ofx.Model(datpath)
 
     # Fetch pipe linetype from pipe dat file
-    datpath = PATH.joinpath('pipe.dat')
+    datpath = PATH / 'pipe.dat'
     pmodel = ofx.Model(datpath)
     linetypes = [obj.Name for obj in pmodel.objects if obj.typeName == 'Line type']
     linetype = pmodel[linetypes[0]]
@@ -968,7 +1019,7 @@ def get_base_case(vessel: Vessel, stinger_radius: float,
     pthlen = pthlen[num_section - 1].split(':')[1].strip()
     stinger_ref.tags['path_length'] = pthlen
 
-    datpath = PATH.joinpath('base case.dat')
+    datpath = PATH / 'base case.dat'
     model.SaveData(datpath)
 
     return model

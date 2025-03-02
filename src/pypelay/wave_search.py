@@ -220,7 +220,7 @@ def wavescreen(sim: Sim):
             title += f'Hmax={hmax:.2f}m, THmax={thmax:.2f}s'
             ax.set_title(title)
 
-            figpath = PATH.joinpath('waves', f'{sim2.tp:02d}s_{seed}.pdf')
+            figpath = PATH / 'waves', f'{sim2.tp:02d}s_{seed}.pdf'
             plt.savefig(figpath)
 
             sim2.seed = seed
@@ -241,7 +241,7 @@ def wavescreen(sim: Sim):
     for sim in results:
         outstr += str(sim) + '\n'
 
-    with open(PATH.joinpath('waves', f'{sim.tp:03d}s.txt'), 'w') as f:
+    with open(PATH / 'waves' / f'{sim.tp:03d}s.txt', 'w') as f:
         f.write(outstr)
 
 

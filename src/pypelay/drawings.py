@@ -37,7 +37,7 @@ def write_dxf_ga(datpath: Path) -> None:
     # roller_names = ['BR5', 'BR6'] + [f'SR{i}' for i in range(1, 13)]
     roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
 
-    dxfpath = Path(str(files('pypelay').joinpath(f'{vessel_name}_ga.dxf')))
+    dxfpath = Path(str(files('pypelay') / f'{vessel_name}_ga.dxf'))
     doc = ezdxf.readfile(dxfpath)
     msp = doc.modelspace()
 
@@ -168,7 +168,7 @@ def write_dxf_rollers(datpath: Path) -> None:
     roller_names = [x[3:] for x in all_names if x[:5] == 'b6 SR']
     nrlr = len(roller_names)
 
-    dxfpath = Path(str(files('pypelay').joinpath(f'{vessel_name}_rollers.dxf')))
+    dxfpath = Path(str(files('pypelay') / f'{vessel_name}_rollers.dxf'))
 
     doc = ezdxf.readfile(dxfpath)
     msp = doc.modelspace()

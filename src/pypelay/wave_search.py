@@ -209,8 +209,9 @@ def wavescreen(sim: Sim):
             # time series has already been checked
             t1 = t0 + thmax
 
-            ind = np.where(np.all(
-                [[t >= t0 - sim2.before], [t <= t1 + sim2.after]], axis=0)[0])[0]
+            ind = np.where(np.all([
+                [t >= t0 - sim2.before], [t <= t1 + sim2.after]],
+                axis=0)[0])[0]
 
             fig, ax = plt.subplots(1, 1, figsize=(12, 8))
             ax.plot(t[ind], elev[ind], color='royalblue')
@@ -220,7 +221,7 @@ def wavescreen(sim: Sim):
             title += f'Hmax={hmax:.2f}m, THmax={thmax:.2f}s'
             ax.set_title(title)
 
-            figpath = PATH / 'waves', f'{sim2.tp:02d}s_{seed}.pdf'
+            figpath = PATH / 'waves' / f'{sim2.tp:02d}s_{seed}.pdf'
             plt.savefig(figpath)
 
             sim2.seed = seed
@@ -267,8 +268,16 @@ def make_folders(folder_names: list[str]) -> bool:
 
 
 def wave_search(xlpath: Path, ncpu: int=8) -> None:
+    """Identifies design wave windows, based on inputs in spreadsheet **environment.xlsx**
+    For explanation of spreadsheet inputs refer to **Spreadsheets.md** help section
 
-    df = pd.read_excel(xlpath)
+    Args:
+        xlpath (Path): Path to *environment.xlsx* spreadsheet.
+        ncpu (int): Number of CPUs to use.
+
+    """
+
+    df = pd.read_excel(xlpath, sheet_name='wave_search')
 
     sims = []
     for dic in df.to_dict('records'):

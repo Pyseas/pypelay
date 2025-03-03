@@ -1,0 +1,50 @@
+# Spreadsheets
+
+## Input spreadsheets
+
+### options.xlsx
+Options related to pipe segmentation and deadband.
+
+### environment.xlsx
+Wave and current data required for dynamic analysis.
+
+#### Sheet: hs_dirn
+Dynamic analysis will be run for each hs and dirn combination.
+For example 2x Hs and 3x dirn will create 6x combinations.
+
+| Column        | Description               |
+| ------------- | ------------------------- |
+| hs            | List of Hs values (m)     |
+| dirn          | List of directions (deg)  |
+| dirn_name     | Name used for grouping results, e.g. 60, 90 and 120 can be named 'beam' |
+
+#### Sheet: current
+
+#### Sheet: wave_search
+Input data required by the *wave_search* function:
+
+| Column        | Description               |
+| ------------- | ------------------------- |
+| tp            | Wave peak period (s)      |
+| gamma         | JONSWAP peakedness parameter |
+| hmax_factor   | Hmax = hmax_factor * Hs   |
+| h_tol         | Hmax tolerance (m)       |
+| thmax_target  | Target period of Hmax    |
+| t_tol         | thmax tolerance (s)      |
+| before        | Number of seconds in dynamic simulation before peak wave occurs |
+| after         | Number of seconds in dynamic simulation after peak wave occurs |
+| numseed       | Number of wave seeds to find |
+
+#### Sheet: waves
+This sheet is automatically created when the user runs the *wave_search* function.
+
+## Output spreadsheets
+
+### static_summary.xlsx
+
+
+### results.xlsx
+
+
+### dyn_summary.xlsx
+

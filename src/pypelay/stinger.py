@@ -29,6 +29,15 @@ class Roller:
 
 @dataclass
 class Vessel:
+    """Vessel class.
+
+    Args:
+        name (str): Vessel name
+        draft (float): Vessel draft in mm
+
+    Examples:
+        >>> vessel = Vessel('S1200', 7400)
+    """
     name: str = 'S1200'
     draft: float = 7400
 
@@ -273,6 +282,22 @@ def static_summary(outpath, datpaths: list[Path]):
 def set_radius(vessel: Vessel, num_section: int, radius: float,
                water_depth: float, tip_clearance: float,
                outpath: Path) -> None:
+    """Create new dat files for specified vessel and stinger configuration.
+
+    Two dat files are created: one with pivoting rollers, one (with *_dyn* suffix)
+    with fixed rollers for use in dynamic analysis
+
+    Pipe segmentation and deadband options are specified in *options.xlsx*,
+    refer to **Spreadsheets** help section.
+
+    Args:
+        vessel (Vessel): Vessel object.
+        num_section (int): Stinger number of sections.
+        radius (float): Stinger radius in m.
+        water_depth (float): Water depth in m.
+        tip_clearance (float): Pipe-roller clearance at stinger tip in m.
+        outpath (Path): File path of new dat file.
+    """
 
     radius *= 1000
     xlpath = files('pypelay') / f'{vessel.name}_configs.xlsx'

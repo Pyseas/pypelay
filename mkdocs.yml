@@ -22,9 +22,8 @@ theme:
       accent: lime
 nav:
   - Introduction: index.md
-  - make_new_model: make_new_model.md
-  - piping_loads: piping_loads.md
-  - soil_springs: soil_springs.md
+  - Stinger: stinger.md
+  - Spreadsheets: spreadsheets.md
   - Reference: ref.md
 markdown_extensions:
   - pymdownx.highlight:
@@ -39,8 +38,9 @@ plugins:
 - mkdocstrings:
     handlers:
       python:
+        paths: [src]
         options:
           show_source: false
           show_root_heading: true
-          docstring_section_style: list
+          docstring_section_style: table
           heading_level: 2

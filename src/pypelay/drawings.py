@@ -248,6 +248,17 @@ def write_dxf_rollers(datpath: Path) -> None:
 
 
 def write_dxf(datpath: Path) -> None:
+    """Create standard stinger configuration drawings in dxf format.
+
+    Two dxf files are created: one showing the full stinger, the other
+    including just the rollers.
+
+    New dxf file paths are based on the input datpath, with extensions
+    *_ga.dxf* and *_rollers.dxf*.
+
+    Args:
+        datpath: File path of Orcaflex dat file
+    """
 
     write_dxf_ga(datpath)
 

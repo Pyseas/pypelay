@@ -1,5 +1,5 @@
 # Introduction
-pypelay is a Python library for S-lay stinger configuration and pipelay analysis.
+**pypelay** is a Python library for S-lay stinger configuration and pipelay analysis.
 
 ## Installation
 Use pip to install pypelay wheel

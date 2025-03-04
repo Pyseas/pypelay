@@ -36,7 +36,7 @@ class Vessel:
         draft (float): Vessel draft in mm
 
     Examples:
-        >>> vessel = Vessel('S1200', 7400)
+        vessel = Vessel('S1200', 7400)
     """
     name: str = 'S1200'
     draft: float = 7400
@@ -291,12 +291,12 @@ def set_radius(vessel: Vessel, num_section: int, radius: float,
     refer to **Spreadsheets** help section.
 
     Args:
-        vessel (Vessel): Vessel object.
-        num_section (int): Stinger number of sections.
-        radius (float): Stinger radius in m.
-        water_depth (float): Water depth in m.
-        tip_clearance (float): Pipe-roller clearance at stinger tip in m.
-        outpath (Path): File path of new dat file.
+        vessel (Vessel): Vessel object
+        num_section (int): Stinger number of sections
+        radius (float): Stinger radius in m
+        water_depth (float): Water depth in m
+        tip_clearance (float): Pipe-roller clearance at stinger tip in m
+        outpath (Path): File path of new dat file
     """
 
     radius *= 1000
@@ -329,6 +329,21 @@ def set_radius(vessel: Vessel, num_section: int, radius: float,
 def select_radius(vessel: Vessel, num_section: int,
                   water_depth: float, tip_clearance: float,
                   lcc_target: float):
+    """Determine optimum stinger radius and create corresponding dat file.
+
+    Two dat files are created: one with pivoting rollers, one (with *_dyn* suffix)
+    with fixed rollers for use in dynamic analysis.
+
+    Pipe segmentation and deadband options are specified in
+    [options.xlsx](spreadsheets.md#optionsxlsx).
+
+    Args:
+        vessel (Vessel): Vessel object
+        num_section (int): Stinger number of sections
+        water_depth (float): Water depth in m
+        tip_clearance (float): Pipe-roller clearance at stinger tip in m
+        lcc_target (float): Target F101 LCC utilization in the sag bend
+    """
 
     # STAGE 1: Use simple catenary model to get first estimate of
     # stinger radius
@@ -696,7 +711,7 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
 
 
 def prep_for_dyn(datpath: Path) -> None:
-    ''' 
+    '''
     Prepare model for dynamic analysis:
      - Set roller orientations, delete constraints
      - Switch off vessel 3 DOF (so that current doesn't effect position)
@@ -875,7 +890,14 @@ def update_segmentation(model: ofx.Model, opts: StingerSetupOptions) -> None:
         print('Couldnt solve after updating segmentation')
 
 
-def adjust_top_tension(inpath: Path, outpath: Path, tension) -> None:
+def adjust_top_tension(inpath: Path, outpath: Path, tension: float) -> None:
+    """Adjust top tension for an existing stinger configuration.
+
+    Args:
+        inpath (Path): File path of existing dat file
+        outpath (Path): File path of new dat file
+        tension (float): Target top tension in kN
+    """
 
     model = ofx.Model(inpath)
 

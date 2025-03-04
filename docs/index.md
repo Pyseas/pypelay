@@ -1,17 +1,4 @@
 # Introduction
-**pypelay** is a Python library for S-lay stinger configuration and pipelay analysis.
+*pypelay* is a Python package for the automation of S-lay stinger configuration and pipelay analysis using Orcaflex software.
 
-## Installation
-Use pip to install pypelay wheel
-```bash
-pip install pypelay-0.1.0-py3-none-any.whl
-```
-
-## Usage
-```python
-import pypelay
-
-# Creates a new sacinp file using data from LiftModel spreadsheet
-pypelay.make_new_model('LiftModel.xlsx', 'sacinp.base', 'sacinp.lift')
-
-```
+It is developed by Pyseas for Sapura Energy Berhad.

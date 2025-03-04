@@ -268,12 +268,12 @@ def make_folders(folder_names: list[str]) -> bool:
 
 
 def wave_search(xlpath: Path, ncpu: int=8) -> None:
-    """Identifies design wave windows, based on inputs in spreadsheet **environment.xlsx**
-    For explanation of spreadsheet inputs refer to **Spreadsheets.md** help section
+    """Identifies design wave windows, based on inputs in
+    [environments.xlsx](spreadsheets.md#environmentxlsx)
 
     Args:
-        xlpath (Path): Path to *environment.xlsx* spreadsheet.
-        ncpu (int): Number of CPUs to use.
+        xlpath (Path): Path to *environment.xlsx* spreadsheet
+        ncpu (int): Number of CPUs to use
 
     """
 

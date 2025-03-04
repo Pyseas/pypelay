@@ -1,5 +1,6 @@
 site_name: pypelay
 theme:
+  logo: pyseas-logo.svg
   name: material
   features:
     # navigation.tabs
@@ -22,9 +23,11 @@ theme:
       accent: lime
 nav:
   - Introduction: index.md
-  - Stinger: stinger.md
+  - Installation: installation.md
+  - User guide: user_guide.md
+  - Examples: examples.md
   - Spreadsheets: spreadsheets.md
-  - Reference: ref.md
+  - Reference: reference.md
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true

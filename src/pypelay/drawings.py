@@ -253,8 +253,8 @@ def write_dxf(datpath: Path) -> None:
     Two dxf files are created: one showing the full stinger, the other
     including just the rollers.
 
-    New dxf file paths are based on the input datpath, with extensions
-    *_ga.dxf* and *_rollers.dxf*.
+    The new dxf file paths are modified versions of the input datpath.
+    For example, *R120.dat* becomes *R120_ga.dxf* and *R120_rollers.dxf*.
 
     Args:
         datpath: File path of Orcaflex dat file

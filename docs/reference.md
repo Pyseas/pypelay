@@ -8,5 +8,7 @@
         - static_summary
         - adjust_top_tension
         - write_dxf
+        - wave_search
         - make_sims
+        - run_sims
         - postprocess

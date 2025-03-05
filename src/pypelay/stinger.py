@@ -378,7 +378,7 @@ def select_radius(vessel: Vessel, num_section: int,
     line.TargetSegmentLength[0] = 5.0
 
     # First estimate of top angle used to set line length
-    # Should use a formula instead (top_angle = f(water_depth))
+    # Should use a formula instead, i.e. top_angle = f(water_depth)
     if water_depth < 100:
         top_angle = math.radians(30.0)
     elif 100 <= water_depth <= 500:
@@ -486,16 +486,26 @@ def select_radius(vessel: Vessel, num_section: int,
             if min(lcc0, lcc1) < lcc_target < max(lcc0, lcc1):
                 to_keep = toggle if lcc0 < lcc1 else 1 - toggle
                 to_del = 1 - to_keep
+                # Delete tmp files not needed
                 (PATH / f'tmp{to_del}.dat').unlink()
+                (PATH / f'tmp{to_del}_dyn.dat').unlink()
+
                 keep_path = PATH / f'R{radii[to_keep] / 1000:.0f}.dat'
+                keep_path_dyn = PATH / f'R{radii[to_keep] / 1000:.0f}_dyn.dat'
+
                 if keep_path.exists():
                     inp = input(f'File {keep_path.name} already exists. Overwrite (y/n)? ')
                     if inp.lower() == 'y':
                         keep_path.unlink()
+                        if keep_path_dyn.exists():
+                            keep_path_dyn.unlink()
                     else:
-                        (PATH / f'tmp{to_keep}.dat').unlink()
-                        break
+                        new_name = input(f'Enter new file name (excluding .dat extension): ')
+                        keep_path = PATH / f'{new_name}.dat'
+                        keep_path_dyn = PATH / f'{new_name}_dyn.dat'
+
                 (PATH / f'tmp{to_keep}.dat').rename(keep_path)
+                (PATH / f'tmp{to_keep}_dyn.dat').rename(keep_path_dyn)
                 break
 
         lcc0 = lcc1

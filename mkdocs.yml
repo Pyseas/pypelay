@@ -25,7 +25,6 @@ nav:
   - Introduction: index.md
   - Installation: installation.md
   - User guide: user_guide.md
-  - Examples: examples.md
   - Spreadsheets: spreadsheets.md
   - Reference: reference.md
 markdown_extensions:

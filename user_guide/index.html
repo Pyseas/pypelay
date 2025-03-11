@@ -12,7 +12,7 @@
         <link rel="prev" href="../installation/">
       
       
-        <link rel="next" href="../spreadsheets/">
+        <link rel="next" href="../reference/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -357,6 +357,48 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Specify environment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sheet-hs_dirn" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sheet: hs_dirn
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sheet-current" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sheet: current
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sheet-wave_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sheet: wave_search
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sheet-waves" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sheet: waves
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -381,26 +423,6 @@
   
 </nav>
       
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../spreadsheets/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Spreadsheets
-  </span>
-  
-
-      </a>
     </li>
   
 
@@ -494,6 +516,48 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Specify environment">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sheet-hs_dirn" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sheet: hs_dirn
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sheet-current" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sheet: current
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sheet-wave_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sheet: wave_search
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sheet-waves" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sheet: waves
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -549,7 +613,7 @@ packages (<em>pathlib</em> is used to specify file system paths):</p>
 <h2 id="input-files">Input files</h2>
 <p><em>pypelay</em> requires several input files containing pipe data, environment and
 configuration options. Copies of the input files are obtained with:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">pypelay</span><span class="o">.</span><span class="n">fetch_inputs</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">pypelay</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
 </span></code></pre></div>
 <p>This will copy the below files into your workspace folder. Update the files with
 your project data.</p>
@@ -568,12 +632,12 @@ your project data.</p>
 <td>Orcaflex dat file containing the pipe linetype</td>
 </tr>
 <tr>
-<td><a href="../spreadsheets/#optionsxlsx">options.xlsx</a></td>
+<td>options.xlsx</td>
 <td>Excel</td>
 <td>Options for pipe segmentation and deadband</td>
 </tr>
 <tr>
-<td><a href="../spreadsheets/#environmentxlsx">environment.xlsx</a></td>
+<td>environment.xlsx</td>
 <td>Excel</td>
 <td>Wave and current data</td>
 </tr>
@@ -598,8 +662,9 @@ to set top tension to the closet 5t increment.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">pypelay</span><span class="o">.</span><span class="n">adjust_top_tension</span><span class="p">(</span><span class="n">PATH</span> <span class="o">/</span> <span class="s1">&#39;R120.dat&#39;</span><span class="p">,</span> <span class="n">PATH</span> <span class="o">/</span> <span class="s1">&#39;R120b.dat&#39;</span><span class="p">,</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>                           <span class="n">tension</span><span class="o">=</span><span class="mi">25</span><span class="o">*</span><span class="mf">9.81</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Compare multiple configurations using <a class="autorefs autorefs-internal" href="../reference/#pypelay.static_summary">static_summary</a>.
-This will create a <a href="../spreadsheets/#static_summaryxlsx">static results</a> spreadsheet.</p>
+<p>Get the static results for any dat file, or compare multiple configurations
+using <a class="autorefs autorefs-internal" href="../reference/#pypelay.static_summary">static_summary</a>. This will create a results
+spreadsheet with one column for each file in <em>datpaths</em>.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">datpaths</span> <span class="o">=</span> <span class="p">[</span><span class="n">PATH</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;R120.dat&#39;</span><span class="p">,</span> <span class="n">PATH</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;R120b.dat&#39;</span><span class="p">]</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">pypelay</span><span class="o">.</span><span class="n">static_summary</span><span class="p">(</span><span class="n">PATH</span> <span class="o">/</span> <span class="s1">&#39;static_results.xlsx&#39;</span><span class="p">,</span> <span class="n">datpaths</span><span class="p">)</span>
 </span></code></pre></div>
@@ -610,8 +675,132 @@ based on the input dat file containing the stinger configuration:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">pypelay</span><span class="o">.</span><span class="n">write_dxf</span><span class="p">(</span><span class="n">PATH</span> <span class="o">/</span> <span class="s1">&#39;R120.dat&#39;</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="specify-environment">Specify environment</h2>
+<p>Wave and current data required for dynamic analysis are specified in the
+spreadsheet <em>environment.xlsx</em>. Inputs are described in the below
+sections.</p>
+<p>Populate the <em>wave_search</em> sheet and run the <em>wave_search</em> function:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">pypelay</span><span class="o">.</span><span class="n">wave_search</span><span class="p">(</span><span class="n">ncpu</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="sheet-hs_dirn">Sheet: hs_dirn</h3>
+<p>Dynamic analysis will be run for each Hs and Direction combination.
+For example 2x Hs and 3x Directions will create 6x combinations.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hs</td>
+<td>List of Hs values (m)</td>
+</tr>
+<tr>
+<td>dirn</td>
+<td>List of directions (deg)</td>
+</tr>
+<tr>
+<td>dirn_name</td>
+<td>Name used for grouping results, e.g. 60, 90 and 120 can be named 'beam'</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sheet-current">Sheet: current</h3>
+<p>Dynamic analysis is run for each direction specified in the direction column.
+A different profile can be specified for each direction, or multiple profiles
+can be run for a single direction. Current profiles are defined starting at column C.</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>overall dirn</td>
+<td>Current direction</td>
+</tr>
+<tr>
+<td>overall profile</td>
+<td>Current profile number</td>
+</tr>
+<tr>
+<td>profile 1 depth</td>
+<td>Current profile 1 depth</td>
+</tr>
+<tr>
+<td>profile 1 speed</td>
+<td>Current profile 1 speed</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sheet-wave_search">Sheet: wave_search</h3>
+<p>Input data required by the <a class="autorefs autorefs-internal" href="../reference/#pypelay.wave_search">wave_search</a> function:</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>tp</td>
+<td>Wave peak period (s)</td>
+</tr>
+<tr>
+<td>gamma</td>
+<td>JONSWAP peakedness parameter</td>
+</tr>
+<tr>
+<td>hmax_factor</td>
+<td>Hmax = hmax_factor * Hs</td>
+</tr>
+<tr>
+<td>h_tol</td>
+<td>Hmax tolerance (m)</td>
+</tr>
+<tr>
+<td>thmax_target</td>
+<td>Target period of Hmax</td>
+</tr>
+<tr>
+<td>t_tol</td>
+<td>thmax tolerance (s)</td>
+</tr>
+<tr>
+<td>before</td>
+<td>Number of seconds in dynamic simulation before peak wave occurs</td>
+</tr>
+<tr>
+<td>after</td>
+<td>Number of seconds in dynamic simulation after peak wave occurs</td>
+</tr>
+<tr>
+<td>numseed</td>
+<td>Number of wave seeds to find</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sheet-waves">Sheet: waves</h3>
+<p>This sheet is automatically created when the user runs the <a class="autorefs autorefs-internal" href="../reference/#pypelay.wave_search">wave_search</a> function.</p>
 <h2 id="dynamic-analysis">Dynamic analysis</h2>
+<p>Create the list of simulations using <a class="autorefs autorefs-internal" href="../reference/#pypelay.make_sims">make_sims</a>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">pypelay</span><span class="o">.</span><span class="n">make_sims</span><span class="p">(</span><span class="n">PATH</span> <span class="o">/</span> <span class="s1">&#39;R120_dyn.dat&#39;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>This will create the spreadsheet <em>sims.xlsx</em>. Open the spreadsheet and confirm
+the list of simulations is as expected.</p>
+<p>Run the simulations using <a class="autorefs autorefs-internal" href="../reference/#pypelay.run_sims">run_sims</a>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">pypelay</span><span class="o">.</span><span class="n">run_sims</span><span class="p">(</span><span class="n">ncpu</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+</span></code></pre></div>
+<p>This can take a significant amount of time, depending on the number of simulations.
+On completion, all results are written to the spreadsheet <em>results.xlsx</em>.</p>
 <h2 id="post-processing">Post-processing</h2>
+<p>Post-process the results using <a class="autorefs autorefs-internal" href="../reference/#pypelay.postprocess">postprocess</a>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">pypelay</span><span class="o">.</span><span class="n">postprocess</span><span class="p">(</span><span class="n">PATH</span> <span class="o">/</span> <span class="s1">&#39;dyn_summary.xlsx&#39;</span><span class="p">)</span>
+</span></code></pre></div>
 
 
 

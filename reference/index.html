@@ -728,8 +728,8 @@
 
     <div class="doc doc-contents ">
 
-        <p>Copy required input files into workspace directory:
-<em>pipe.dat</em>, <em>options.xlsx</em> and <em>environment.xlsx</em></p>
+        <p>Copy input files into workspace directory:
+<em>pipe.dat</em>, <em>options.xlsx</em> and <em>environment.xlsx</em>.</p>
 
     </div>
 
@@ -748,7 +748,7 @@
 
         <p>Create new dat files for specified vessel and stinger configuration.</p>
 <p>Two dat files are created: one with pivoting rollers, one (with <em>_dyn</em> suffix)
-with fixed rollers for use in dynamic analysis</p>
+with fixed rollers for use in dynamic analysis.</p>
 <p>Pipe segmentation and deadband options are specified in <em>options.xlsx</em>.</p>
 
 
@@ -1110,7 +1110,7 @@ For example, an input of <em>R120.dat</em> will create <em>R120_ga.dxf</em> and
 
     <div class="doc doc-contents ">
 
-        <p>Identifies design wave windows, based on inputs in <em>environment.xlsx</em></p>
+        <p>Identifies design wave windows, based on inputs in <em>environment.xlsx</em>.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1131,7 +1131,7 @@ For example, an input of <em>R120.dat</em> will create <em>R120_ga.dxf</em> and
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Number of CPUs to use</p>
+                <p>Number of CPU cores to use</p>
               </div>
             </td>
             <td>
@@ -1202,6 +1202,54 @@ simulations to run.</p>
 
 
     <div class="doc doc-contents ">
+
+        <p>Run dynamic simulations in parallel using <em>ncpu</em> CPU cores.</p>
+<p>If rerun is specified then the specified dat files will be created
+in <em>rerun</em> folder. For example, rerun=[2, 5] will create dat files
+<em>LC_00002.dat</em> and <em>LC_00005.dat</em>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>ncpu</code></td>
+            <td>
+                  <code>int</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of CPU cores to use</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>rerun</code></td>
+            <td>
+                  <code>list[int] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>List of simulation dat files to create</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
     </div>
 

@@ -254,7 +254,8 @@ def write_dxf(datpath: Path) -> None:
     including just the rollers.
 
     The new dxf file paths are modified versions of the input datpath.
-    For example, *R120.dat* becomes *R120_ga.dxf* and *R120_rollers.dxf*.
+    For example, an input of *R120.dat* will create *R120_ga.dxf* and
+    *R120_rollers.dxf*.
 
     Args:
         datpath: File path of Orcaflex dat file

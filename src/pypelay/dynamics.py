@@ -74,13 +74,20 @@ def get_header() -> list[str]:
     return header
 
 
-def make_sims(inpath: Path, base_filename: str) -> None:
+def make_sims(base_path: Path) -> None:
+    """Create spreadsheet *sims.xlsx* containing the list of
+    simulations to run.
+
+    Args:
+        base_path: File path of base case Orcaflex dat file
+    """
 
     opts = get_options()
+    envpath = PATH / 'environment.xlsx'
 
-    df0 = pd.read_excel(inpath, sheet_name='waves')
-    df1 = pd.read_excel(inpath, sheet_name='hs_dirn')
-    df2 = pd.read_excel(inpath, sheet_name='current', header=[0, 1])
+    df0 = pd.read_excel(envpath, sheet_name='waves')
+    df1 = pd.read_excel(envpath, sheet_name='hs_dirn')
+    df2 = pd.read_excel(envpath, sheet_name='current', header=[0, 1])
 
     df0['duration'] = df0['before'] + df0['after']
     drop_cols = [
@@ -98,7 +105,7 @@ def make_sims(inpath: Path, base_filename: str) -> None:
     df1['join'] = 0
 
     sims = df0.merge(df1, on='join', how='outer')
-    sims['base_filename'] = base_filename
+    sims['base_filename'] = base_path.name
     sims['stinger_tip_len'] = opts.tip_len
     sims.drop(['join'], axis=1, inplace=True)
     sims['lc'] = range(1, len(sims.index) + 1)
@@ -375,6 +382,16 @@ def combine_results() -> None:
 
 
 def run_sims(ncpu: int, rerun: list[int] | None = None):
+    """Run dynamic simulations in parallel using *ncpu* CPU cores.
+
+    If rerun is specified then the specified dat files will be created
+    in *rerun* folder. For example, rerun=[2, 5] will create dat files
+    *LC_00002.dat* and *LC_00005.dat*.
+
+    Args:
+        ncpu: Number of CPU cores to use
+        rerun: List of simulation dat files to create 
+    """
 
     fpath = PATH / 'sims'
     if not fpath.exists():
@@ -429,7 +446,12 @@ def result_summary(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     return res2
 
 
-def postprocess() -> None:
+def postprocess(outpath: Path) -> None:
+    """Postprocess results and write to spreadsheet.
+
+    Args:
+        outpath: File path of output spreadsheet, e.g. *dyn_summary.xlsx*
+    """
 
     df = pd.read_excel(PATH / 'results.xlsx')
 
@@ -453,7 +475,6 @@ def postprocess() -> None:
     res1 = res0.groupby('dirn_name').agg(aggs)
     res1 = res1.loc[row_order]
     res1.reset_index(inplace=True)
-    # res1.to_excel(PATH / 'summary_2.xlsx', index=False)
 
     # Layback and clearances
     cols = ['layback', 'scope', 'pipe_gain',
@@ -475,9 +496,8 @@ def postprocess() -> None:
         for loc in ['overbend_dcc', 'overbend_lcc', 'tip', 'sag']:
             cols.append(f'f101{lc}_{loc}')
     res5 = result_summary(res1, cols)
-    # res4.to_excel(PATH / 'f101.xlsx', index=False)
 
-    with pd.ExcelWriter(PATH / 'dyn_summary.xlsx') as writer:
+    with pd.ExcelWriter(outpath) as writer:
         res0.to_excel(writer, sheet_name='Avg 5 seeds', index=False)
         res1.to_excel(writer, sheet_name='Group by dirn', index=False)
         res2.to_excel(writer, sheet_name='Layback, clearance', index=False)

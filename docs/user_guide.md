@@ -29,17 +29,17 @@ vessel = pypelay.Vessel('S1200', draft=7400)
 configuration options. Copies of the input files are obtained with:
 
 ```python
-pypelay.fetch_inputs()
+pypelay.init()
 ```
 
 This will copy the below files into your workspace folder. Update the files with
 your project data.
 
-| File             |  Format | Description               |
-| --------------   | ------- | ------------------------- |
-| pipe.dat         |  Orcaflex | Orcaflex dat file containing the pipe linetype   |
-| [options.xlsx](spreadsheets.md#optionsxlsx) |  Excel | Options for pipe segmentation and deadband  |
-| [environment.xlsx](spreadsheets.md#environmentxlsx) |  Excel | Wave and current data  |
+| File              |  Format   | Description               |
+| --------------    | -------   | ------------------------- |
+| pipe.dat          |  Orcaflex | Orcaflex dat file containing the pipe linetype   |
+| options.xlsx      |  Excel    | Options for pipe segmentation and deadband  |
+| environment.xlsx  |  Excel    | Wave and current data  |
 
 ## Select stinger radius
 The fasest way to obtain the optimum stinger radius is using
@@ -70,8 +70,9 @@ pypelay.adjust_top_tension(PATH / 'R120.dat', PATH / 'R120b.dat',
                            tension=25*9.81)
 ```
 
-Compare multiple configurations using [static_summary][pypelay.static_summary].
-This will create a [static results](spreadsheets.md#static_summaryxlsx) spreadsheet.
+Get the static results for any dat file, or compare multiple configurations
+using [static_summary][pypelay.static_summary]. This will create a results
+spreadsheet with one column for each file in *datpaths*.
 
 ```python
 datpaths = [PATH / f'R120.dat', PATH / f'R120b.dat']
@@ -88,11 +89,78 @@ pypelay.write_dxf(PATH / 'R120.dat')
 ```
 
 ## Specify environment
+Wave and current data required for dynamic analysis are specified in the
+spreadsheet *environment.xlsx*. Inputs are described in the below
+sections.
 
+Populate the *wave_search* sheet and run the *wave_search* function:
+
+```python
+pypelay.wave_search(ncpu=8)
+```
+
+### Sheet: hs_dirn
+Dynamic analysis will be run for each Hs and Direction combination.
+For example 2x Hs and 3x Directions will create 6x combinations.
+
+| Column        | Description               |
+| ------------- | ------------------------- |
+| hs            | List of Hs values (m)     |
+| dirn          | List of directions (deg)  |
+| dirn_name     | Name used for grouping results, e.g. 60, 90 and 120 can be named 'beam' |
+
+### Sheet: current
+Dynamic analysis is run for each direction specified in the direction column.
+A different profile can be specified for each direction, or multiple profiles
+can be run for a single direction. Current profiles are defined starting at column C.
+
+| Column        | Description               |
+| ------------- | ------------------------- |
+| overall dirn      | Current direction     |
+| overall profile   | Current profile number   |
+| profile 1 depth   | Current profile 1 depth  |
+| profile 1 speed   | Current profile 1 speed  |
+
+### Sheet: wave_search
+Input data required by the [wave_search][pypelay.wave_search] function:
+
+| Column        | Description               |
+| ------------- | ------------------------- |
+| tp            | Wave peak period (s)      |
+| gamma         | JONSWAP peakedness parameter |
+| hmax_factor   | Hmax = hmax_factor * Hs   |
+| h_tol         | Hmax tolerance (m)       |
+| thmax_target  | Target period of Hmax    |
+| t_tol         | thmax tolerance (s)      |
+| before        | Number of seconds in dynamic simulation before peak wave occurs |
+| after         | Number of seconds in dynamic simulation after peak wave occurs |
+| numseed       | Number of wave seeds to find |
+
+### Sheet: waves
+This sheet is automatically created when the user runs the [wave_search][pypelay.wave_search] function.
 
 ## Dynamic analysis
+Create the list of simulations using [make_sims][pypelay.make_sims]:
 
+```python
+pypelay.make_sims(PATH / 'R120_dyn.dat')
+```
+
+This will create the spreadsheet *sims.xlsx*. Open the spreadsheet and confirm
+the list of simulations is as expected.
+
+Run the simulations using [run_sims][pypelay.run_sims]:
+
+```python
+pypelay.run_sims(ncpu=8)
+```
+
+This can take a significant amount of time, depending on the number of simulations.
+On completion, all results are written to the spreadsheet *results.xlsx*.
 
 ## Post-processing
+Post-process the results using [postprocess][pypelay.postprocess]:
 
-
+```python
+pypelay.postprocess(PATH / 'dyn_summary.xlsx')
+```

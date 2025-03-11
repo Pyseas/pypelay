@@ -5,6 +5,7 @@ from pathlib import Path
 import OrcFxAPI as ofx
 import math
 import pandas as pd
+import shutil
 import numpy as np
 import warnings
 from dataclasses import dataclass, field
@@ -14,8 +15,8 @@ from importlib.resources import files
 
 PATH = Path('.')
 
-__all__ = ['static_summary', 'set_radius', 'select_radius', 'stinger_setup',
-           'adjust_top_tension', 'Vessel']
+__all__ = ['init', 'static_summary', 'set_radius', 'select_radius',
+           'stinger_setup', 'adjust_top_tension', 'Vessel']
 
 
 @dataclass
@@ -119,7 +120,7 @@ class LineType:
 
 def static_summary(outpath, datpaths: list[Path]):
 
-    xlpath = files('pypelay') / (f'static_summary.xlsx')
+    xlpath = files('pypelay') / 'static_summary.xlsx'
     wb = load_workbook(xlpath)
     ws = wb['Sheet1']
     # style_str = NamedStyle(name='style_str')
@@ -279,16 +280,32 @@ def static_summary(outpath, datpaths: list[Path]):
     wb.save(outpath)
 
 
+def init():
+    """Copy input files into workspace directory:
+    *pipe.dat*, *options.xlsx* and *environment.xlsx*.
+    """
+
+    for fname in ['pipe.dat', 'options.xlsx', 'environment.xlsx']:
+        inpath = files('pypelay') / fname
+        print(inpath)
+        outpath = PATH / fname
+        if outpath.exists():
+            inp = input(f'File {fname} already exists. Overwrite (y/n)? ')
+            if inp.lower() == 'n':
+                return
+
+        shutil.copy(inpath, outpath.resolve())
+
+
 def set_radius(vessel: Vessel, num_section: int, radius: float,
                water_depth: float, tip_clearance: float,
                outpath: Path) -> None:
     """Create new dat files for specified vessel and stinger configuration.
 
     Two dat files are created: one with pivoting rollers, one (with *_dyn* suffix)
-    with fixed rollers for use in dynamic analysis
+    with fixed rollers for use in dynamic analysis.
 
-    Pipe segmentation and deadband options are specified in *options.xlsx*,
-    refer to **Spreadsheets** help section.
+    Pipe segmentation and deadband options are specified in *options.xlsx*.
 
     Args:
         vessel (Vessel): Vessel object
@@ -334,8 +351,7 @@ def select_radius(vessel: Vessel, num_section: int,
     Two dat files are created: one with pivoting rollers, one (with *_dyn* suffix)
     with fixed rollers for use in dynamic analysis.
 
-    Pipe segmentation and deadband options are specified in
-    [options.xlsx](spreadsheets.md#optionsxlsx).
+    Pipe segmentation and deadband options are specified in *options.xlsx*.
 
     Args:
         vessel (Vessel): Vessel object

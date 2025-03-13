@@ -450,7 +450,7 @@ def postprocess(outpath: Path) -> None:
     """Postprocess results and write to spreadsheet.
 
     Args:
-        outpath: File path of output spreadsheet, e.g. *dyn_summary.xlsx*
+        outpath: File path of output spreadsheet
     """
 
     df = pd.read_excel(PATH / 'results.xlsx')

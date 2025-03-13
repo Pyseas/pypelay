@@ -93,13 +93,15 @@ Wave and current data required for dynamic analysis are specified in the
 spreadsheet *environment.xlsx*. Inputs are described in the below
 sections.
 
-Populate the *wave_search* sheet and run the *wave_search* function:
+Populate the *wave_search* sheet and run the *wave_search* function. This will
+generate a list of design wave windows, including seed number and time origin,
+on the *waves* sheet.
 
 ```python
 pypelay.wave_search(ncpu=8)
 ```
 
-### Sheet: hs_dirn
+### Sheet: *hs_dirn*
 Dynamic analysis will be run for each Hs and Direction combination.
 For example 2x Hs and 3x Directions will create 6x combinations.
 
@@ -109,7 +111,7 @@ For example 2x Hs and 3x Directions will create 6x combinations.
 | dirn          | List of directions (deg)  |
 | dirn_name     | Name used for grouping results, e.g. 60, 90 and 120 can be named 'beam' |
 
-### Sheet: current
+### Sheet: *current*
 Dynamic analysis is run for each direction specified in the direction column.
 A different profile can be specified for each direction, or multiple profiles
 can be run for a single direction. Current profiles are defined starting at column C.
@@ -121,24 +123,25 @@ can be run for a single direction. Current profiles are defined starting at colu
 | profile 1 depth   | Current profile 1 depth  |
 | profile 1 speed   | Current profile 1 speed  |
 
-### Sheet: wave_search
+### Sheet: *wave_search*
 Input data required by the [wave_search][pypelay.wave_search] function:
 
-| Column        | Description               |
-| ------------- | ------------------------- |
-| tp            | Wave peak period (s)      |
-| gamma         | JONSWAP peakedness parameter |
-| hmax_factor   | Hmax = hmax_factor * Hs   |
-| h_tol         | Hmax tolerance (m)       |
-| thmax_target  | Target period of Hmax    |
-| t_tol         | thmax tolerance (s)      |
-| before        | Number of seconds in dynamic simulation before peak wave occurs |
-| after         | Number of seconds in dynamic simulation after peak wave occurs |
-| numseed       | Number of wave seeds to find |
+| Column        |  Units  | Description               |
+| ------------- |---------| ------------------------- |
+| tp            |    s    | Wave peak period         |
+| gamma         |    -    | JONSWAP peakedness parameter |
+| hmax_factor   |    -    | Hmax = hmax_factor * Hs   |
+| h_tol         |    m    | Hmax tolerance          |
+| thmax_target  |    s    | Target period of Hmax    |
+| t_tol         |    s    | thmax tolerance         |
+| before        |    s    | Number of seconds in dynamic simulation before peak wave occurs |
+| after         |    s    | Number of seconds in dynamic simulation after peak wave occurs |
+| numseed       |    -    | Number of wave seeds to find |
 
-### Sheet: waves
-This sheet is automatically created when the user runs the [wave_search][pypelay.wave_search] function.
-
+### Sheet: *waves*
+This sheet is automatically created when the user runs the
+[wave_search][pypelay.wave_search] function.
+ 
 ## Dynamic analysis
 Create the list of simulations using [make_sims][pypelay.make_sims]:
 
@@ -155,7 +158,7 @@ Run the simulations using [run_sims][pypelay.run_sims]:
 pypelay.run_sims(ncpu=8)
 ```
 
-This can take a significant amount of time, depending on the number of simulations.
+This can take several hours (or more) depending on the number of simulations.
 On completion, all results are written to the spreadsheet *results.xlsx*.
 
 ## Post-processing

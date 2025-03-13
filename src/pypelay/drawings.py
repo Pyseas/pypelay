@@ -24,8 +24,8 @@ def pin_hole(y: float, ymin: float, yincr: float) -> str:
 def write_dxf_ga(datpath: Path) -> None:
     ''' Text is all ROMANS, height 680, layer DIM
         Update stinger roller settings table: stinger angle, BOP height,
-        stinger hole, roller hole. Add labels for all stinger rollers (e.g. SR #1)
-        Angular dimensions between stinger sections'''
+        stinger hole, roller hole. Add labels for all stinger rollers
+        (e.g. SR #1). Angular dimensions between stinger sections'''
 
     model = ofx.Model(datpath)
 
@@ -33,9 +33,6 @@ def write_dxf_ga(datpath: Path) -> None:
     vessel_name = stinger_ref.Connection[2:]
 
     all_names = [obj.Name for obj in model.objects]
-
-    # roller_names = ['BR5', 'BR6'] + [f'SR{i}' for i in range(1, 13)]
-    roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
 
     dxfpath = Path(str(files('pypelay') / f'{vessel_name}_ga.dxf'))
     doc = ezdxf.readfile(dxfpath)
@@ -56,81 +53,82 @@ def write_dxf_ga(datpath: Path) -> None:
     # Table top left corner (for stinger rollers)
     tbl_x, tbl_y = 35169.52, 143297.41
     row_ht, col_wd = 1860.22, 4662.38
-    text_x = tbl_x + 6 * col_wd
-    text_y = tbl_y - 0.5 * row_ht
-
-    # Barge roller table text coords
-    br_tbl_coords = {
-        5: [26694.9, 107655.9],
-        6: [32554.3, 107655.9],
-    }
 
     # Input stinger angle in first row
+    text_x = tbl_x + 6 * col_wd
+    text_y = tbl_y - 0.5 * row_ht
     ang1 = model['b6 stinger_1'].InitialRotation3
     msp.add_text(f'{ang1:.1f}', height=680,
         dxfattribs={'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
-        ).set_placement((text_x, text_y), align=TextEntityAlignment.MIDDLE_CENTER)
+        ).set_placement((text_x, text_y),
+                        align=TextEntityAlignment.MIDDLE_CENTER)
 
-    # Insert rollers
-    for rname in roller_names:
-        if f'b6 {rname}' not in all_names:
-            continue
-        barge_roller = False
+    barge_rlr_names = [x[3:] for x in all_names if x[:5] == 'b6 BR']
+    stinger_rlr_names = [x[3:] for x in all_names if x[:5] == 'b6 SR']
+    rlr_names = barge_rlr_names + stinger_rlr_names
+
+    # Insert roller blocks
+    for rname in rlr_names:
         if rname[:1] == 'B':
-            barge_roller = True
             block_name = 'barge_roller'
         else:
             block_name = 'stinger_roller'
-
-        cn = model[f'cn {rname}']
         buoy = model[f'b6 {rname}']
-        y = round(cn.InitialY * 1000)
-        ymin = float(buoy.tags['ymin']) * 1000
-        yincr = float(buoy.tags['yincr']) * 1000
         buoy.Connection = 'b6 stinger_ref'
         glob_x = buoy.InitialX * 1000
         glob_y = buoy.InitialY * 1000
         r3 = buoy.InitialRotation3
-
         # Insert roller block
         msp.add_blockref(
             block_name, (glob_x, glob_y),
             dxfattribs={'rotation': r3, 'layer': 'ROLLER'})
 
-        irlr = int(rname[2:])
+    text_attribs = {'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
 
-        # Add text: table text and stinger roller labels
-        if barge_roller:
-            text_x, text_y = br_tbl_coords[irlr]
-            msp.add_text(f'{y}', height=680,
-                dxfattribs={'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
-                ).set_placement((text_x, text_y), align=TextEntityAlignment.MIDDLE_CENTER)
-        else:
-            rl_hole, st_hole = pin_hole(y, ymin, yincr).split('-')
-            # Add label under roller post
-            buoy.Connection = cn.InFrameConnection
-            buoy.InitialY = 0
-            buoy.InitialRotation3 = 0
-            buoy.Connection = 'b6 stinger_ref'
-            origin_x = buoy.InitialX * 1000
-            origin_y = buoy.InitialY * 1000
-            post_angle = math.radians(buoy.InitialRotation3 - 90)
-            label_offset = 800
-            label_x = origin_x + label_offset * math.cos(post_angle)
-            label_y = origin_y + label_offset * math.sin(post_angle)
-            text = f'SR #{irlr}'
+    # Barge roller table text
+    for irlr, rname in enumerate(barge_rlr_names):
+        cn = model[f'cn {rname}']
+        y = round(cn.InitialY * 1000)
+        text_x = 29770 + irlr * 5860
+        text_y = 107656
+        msp.add_text(f'{y}', height=680,
+            dxfattribs=text_attribs
+            ).set_placement((text_x, text_y),
+                            align=TextEntityAlignment.MIDDLE_CENTER)
+
+    # Stinger roller labels and table text
+    for irlr, rname in enumerate(stinger_rlr_names):
+        # Label
+        cn = model[f'cn {rname}']
+        buoy = model[f'b6 {rname}']
+        y = round(cn.InitialY * 1000)
+        ymin = float(buoy.tags['ymin']) * 1000
+        yincr = float(buoy.tags['yincr']) * 1000
+        rl_hole, st_hole = pin_hole(y, ymin, yincr).split('-')
+        buoy.Connection = cn.InFrameConnection
+        buoy.InitialY = 0
+        buoy.InitialRotation3 = 0
+        buoy.Connection = 'b6 stinger_ref'
+        origin_x = buoy.InitialX * 1000
+        origin_y = buoy.InitialY * 1000
+        post_angle = math.radians(buoy.InitialRotation3 - 90)
+        label_offset = 800
+        label_x = origin_x + label_offset * math.cos(post_angle)
+        label_y = origin_y + label_offset * math.sin(post_angle)
+        text = f'SR #{rname[2:]}'
+        msp.add_text(text, height=680,
+            dxfattribs=text_attribs
+            ).set_placement((label_x, label_y),
+                            align=TextEntityAlignment.TOP_LEFT)
+        # Table text
+        text_x = tbl_x + (irlr + 0.5) * col_wd
+        text_y = tbl_y - 1.5 * row_ht
+        for text in [f'{y}', st_hole, rl_hole]:
             msp.add_text(text, height=680,
-                dxfattribs={'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
-                ).set_placement((label_x, label_y), align=TextEntityAlignment.TOP_LEFT)
-
-            # Add table text (stinger rollers)
-            text_x = tbl_x + (irlr - 0.5) * col_wd
-            text_y = tbl_y - 1.5 * row_ht
-            for text in [f'{y}', st_hole, rl_hole]:
-                msp.add_text(text, height=680,
-                    dxfattribs={'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
-                    ).set_placement((text_x, text_y), align=TextEntityAlignment.MIDDLE_CENTER)
-                text_y -= row_ht
+                dxfattribs=text_attribs
+                ).set_placement((text_x, text_y),
+                                align=TextEntityAlignment.MIDDLE_CENTER)
+            text_y -= row_ht
 
     # Add BOP profile
     # Reopen model since the roller positions in the first one are all messed up

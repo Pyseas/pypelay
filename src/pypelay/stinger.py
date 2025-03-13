@@ -9,6 +9,7 @@ import shutil
 import numpy as np
 import warnings
 from dataclasses import dataclass, field
+from tabulate import tabulate
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment
 from importlib.resources import files
@@ -16,7 +17,7 @@ from importlib.resources import files
 PATH = Path('.')
 
 __all__ = ['init', 'static_summary', 'set_radius', 'select_radius',
-           'stinger_setup', 'adjust_top_tension', 'Vessel']
+           'stinger_setup', 'adjust_top_tension', 'Vessel', 'list_raos']
 
 
 @dataclass
@@ -34,13 +35,35 @@ class Vessel:
 
     Args:
         name (str): Vessel name
-        draft (float): Vessel draft in mm
+        vessel_type (str): Orcaflex vessel type name
+        draft_name (str): Orcaflex draft name
 
     Examples:
-        vessel = Vessel('S1200', 7400)
+        vessel = Vessel('S1200', 'vt S1200', 'Draft_7.4m')
     """
     name: str = 'S1200'
-    draft: float = 7400
+    vessel_type: str = 'vt S1200'
+    draft_name: str = 'Draft_7.4m'
+    draft: float = 0.0
+
+    def __post_init__(self):
+        xlpath = Path(str(files('pypelay') / 'raos.xlsx'))
+        df = pd.read_excel(xlpath)
+        msg = 'not recognized, use pypelay.list_raos() to see available RAOs'
+
+        df = df[df['Vessel'] == self.name]
+        if df.empty:
+            raise ValueError(f'Vessel name {msg}')
+
+        df = df[df['Vessel type'] == self.vessel_type]
+        if df.empty:
+            raise ValueError(f'Vessel type {msg}')
+
+        df = df[df['Draft name'] == self.draft_name]
+        if df.empty:
+            raise ValueError(f'Draft name {msg}')
+        
+        self.draft = float(df.iloc[0]['Draft_m'])
 
 @dataclass
 class StingerSetupArgs:
@@ -118,9 +141,25 @@ class LineType:
         return wt_in_air, wt_submerged
 
 
+def list_raos(vessel_name: str | None = None):
+    """List available RAOs.
+
+    Args:
+        vessel_name (str): Vessel name
+    """
+
+    xlpath = Path(str(files('pypelay') / 'raos.xlsx'))
+    df = pd.read_excel(xlpath)
+
+    if vessel_name:
+        df = df[df['Vessel'] == vessel_name]
+
+    print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
+
+
 def static_summary(outpath, datpaths: list[Path]):
 
-    xlpath = files('pypelay') / 'static_summary.xlsx'
+    xlpath = Path(str(files('pypelay') / 'static_summary.xlsx'))
     wb = load_workbook(xlpath)
     ws = wb['Sheet1']
     # style_str = NamedStyle(name='style_str')
@@ -446,7 +485,6 @@ def select_radius(vessel: Vessel, num_section: int,
     line_angles = np.interp(arc_dep, arc_ang, line_angles)
 
     xlpath = files('pypelay') / (f'{vessel.name}_configs.xlsx')
-    # xlpath = PATH / f'{vessel.name}_configs.xlsx'
     df = pd.read_excel(xlpath)
 
     df = df[(df['num_section'] == num_section) & 
@@ -722,7 +760,7 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
 
     model.SaveData(sim.outpath)
 
-    # Create dat file suitable for running dynamics (vessel )
+    # Create dat file suitable for running dynamics (vessel)
     prep_for_dyn(sim.outpath)
 
     res = get_setup_results(model, sim.outpath)
@@ -1077,6 +1115,12 @@ def get_base_case(vessel: Vessel, stinger_radius: float,
 
     datpath = Path(str(files('pypelay') / f'{vessel.name}.dat'))
     model = ofx.Model(datpath)
+
+    # Set vessel type and draft
+    ovessel = model[f'v {vessel.name}']
+    ovessel.VesselType = vessel.vessel_type
+    ovessel.Draught = vessel.draft_name
+    ovessel.InitialZ = -vessel.draft
 
     # Fetch pipe linetype from pipe dat file
     datpath = PATH / 'pipe.dat'

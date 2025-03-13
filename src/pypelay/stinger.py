@@ -16,7 +16,7 @@ from importlib.resources import files
 
 PATH = Path('.')
 
-__all__ = ['init', 'static_summary', 'set_radius', 'select_radius',
+__all__ = ['fetch_files', 'static_summary', 'set_radius', 'select_radius',
            'stinger_setup', 'adjust_top_tension', 'Vessel', 'list_raos']
 
 
@@ -142,7 +142,8 @@ class LineType:
 
 
 def list_raos(vessel_name: str | None = None):
-    """List available RAOs.
+    """List available RAOs for the specified vessel.
+    If vessel name is not given then list all RAOs.
 
     Args:
         vessel_name (str): Vessel name
@@ -319,7 +320,7 @@ def static_summary(outpath, datpaths: list[Path]):
     wb.save(outpath)
 
 
-def init():
+def fetch_files():
     """Copy input files into workspace directory:
     *pipe.dat*, *options.xlsx* and *environment.xlsx*.
     """

@@ -1,11 +1,12 @@
 # User guide
-If you have followed the installation instructions then you have VS Code
-open in a workspace folder with a virtual environment, into which you've
-installed the *pypelay* package.
 
 Run the pipelay analysis by following each of the below sections in sequence.
 
-## Getting started
+## New project setup
+If you have followed the installation instructions then you have VS Code
+open in a new folder, with a virtual environment into which you've
+installed the *pypelay* package.
+
 Create a new python file, e.g. *main.py*.
 
 At the top of the file, import the *pypelay* and *pathlib*
@@ -18,28 +19,40 @@ from pathlib import Path
 PATH = Path('.')
 ```
 
-Next specify the vessel and its draft:
-
-```python
-vessel = pypelay.Vessel('S1200', draft=7400)
-```
-
-## Input files
+### Fetch input files
 *pypelay* requires several input files containing pipe data, environment and
-configuration options. Copies of the input files are obtained with:
+configuration options. Files can be manually copied across from another project,
+or they can be obtained with [fetch_files][pypelay.fetch_files]:
 
 ```python
-pypelay.init()
+pypelay.fetch_files()
 ```
 
-This will copy the below files into your workspace folder. Update the files with
-your project data.
+This will copy the below files into your workspace folder. Update the *pipe.dat* and 
+*options.xlsx* files with your project data. *environment.xlsx* can wait until you're 
+ready to run dynamic analysis.
 
 | File              |  Format   | Description               |
 | --------------    | -------   | ------------------------- |
 | pipe.dat          |  Orcaflex | Orcaflex dat file containing the pipe linetype   |
 | options.xlsx      |  Excel    | Options for pipe segmentation and deadband  |
 | environment.xlsx  |  Excel    | Wave and current data  |
+
+### Select vessel
+
+Display the list of available RAOs using [list_raos][pypelay.list_raos]:
+
+```python
+pypelay.list_raos()
+```
+
+Select the vessel, vessel type and draft from the RAO list, and 
+create the vessel:
+
+```python
+vessel = pypelay.Vessel('S1200', 'vt S1200', 'Draft_7.4m')
+```
+
 
 ## Select stinger radius
 The fasest way to obtain the optimum stinger radius is using

@@ -3,7 +3,8 @@
         show_docstring_examples: true
         members:
         - Vessel
-        - init
+        - fetch_files
+        - list_raos
         - set_radius
         - select_radius
         - static_summary

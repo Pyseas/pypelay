@@ -2,8 +2,8 @@ site_name: pypelay
 extra_css:
   - stylesheets/extra.css
 theme:
-  logo: pyseas-logo.svg
   name: material
+  logo: pyseas-logo.svg
   features:
     # navigation.tabs
     # navigation.sections

@@ -28,9 +28,11 @@ or they can be obtained with [fetch_files][pypelay.fetch_files]:
 pypelay.fetch_files()
 ```
 
-This will copy the below files into your workspace folder. Update the *pipe.dat* and 
-*options.xlsx* files with your project data. *environment.xlsx* can wait until you're 
-ready to run dynamic analysis.
+This will copy the below files into your workspace folder. Update the 
+*pipe.dat* and *options.xlsx* files with your project data.
+Instructions for populating the *environment.xlsx* spreadsheet are
+given [below](#specify-environment). This can be done any time before
+running dynamic analysis.
 
 | File              |  Format   | Description               |
 | --------------    | -------   | ------------------------- |
@@ -40,7 +42,8 @@ ready to run dynamic analysis.
 
 ### Select vessel
 
-Display the list of available RAOs using [list_raos][pypelay.list_raos]:
+Display the list of available vessels and RAOs using
+[list_raos][pypelay.list_raos]:
 
 ```python
 pypelay.list_raos()

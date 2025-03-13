@@ -56,7 +56,6 @@ create the vessel:
 vessel = pypelay.Vessel('S1200', 'vt S1200', 'Draft_7.4m')
 ```
 
-
 ## Select stinger radius
 The fasest way to obtain the optimum stinger radius is using
 [select_radius][pypelay.select_radius]:

@@ -1,22 +1,78 @@
 # User guide
 
-Run the pipelay analysis by following each of the below sections in sequence.
-
-## New project setup
+## Getting started
 If you have followed the installation instructions then you have VS Code
 open in a new folder, with a virtual environment into which you've
 installed the *pypelay* package.
 
-Create a new python file, e.g. *main.py*.
+Copy and paste the below code block into a new file called *main.py*.
 
-At the top of the file, import the *pypelay* and *pathlib*
-packages (*pathlib* is used to specify file system paths):
+All of the commands in the code block are commented out. To run a command
+you first uncomment it, run the Python script, then re-comment it.
 
-```python
+    Uncomment line(s) -> Run script -> Comment line(s)
+
+Work through the file running each command in sequence. The purpose of each
+command is described in the sections below. 
+
+<!-- ``` py linenums="1" -->
+
+``` { .py .copy }
 import pypelay
 from pathlib import Path
 
 PATH = Path('.')
+
+
+def main():
+
+    # ------------------------------------------------------------------
+    # STEP 1 - New project setup
+    # pypelay.fetch_files()
+
+    # pypelay.list_raos('S1200')
+
+    # vessel = pypelay.Vessel('S1200', vessel_type='vt S1200',
+    #                         draft_name='Draft_7.4m')
+
+    # ------------------------------------------------------------------
+    # STEP 2 - Stinger configuration
+    # pypelay.select_radius(vessel, num_section=3, water_depth=180,
+    #                       tip_clearance=0.3, lcc_target=0.3)
+
+    # pypelay.set_radius(vessel, num_section=3, radius=120,
+    #                    water_depth=200, tip_clearance=0.3,
+    #                    outpath=PATH / f'R120.dat')
+
+    # pypelay.adjust_top_tension(inpath=PATH / 'R120.dat',
+    #                            outpath=PATH / 'R120b.dat',
+    #                            tension=30 * 9.81)
+
+    # datpaths = [PATH / f'R120.dat', PATH / f'R120b.dat']
+    # pypelay.static_summary(PATH / 'static_summary.xlsx', datpaths)
+
+    # pypelay.write_dxf(PATH / 'R120b.dat')
+
+    # ------------------------------------------------------------------
+    # STEP 3 - Wave search
+    # pypelay.wave_search(ncpu=8)
+
+    # ------------------------------------------------------------------
+    # STEP 4 - Dynamic simulations and post-processing
+
+    # Create sims spreadsheet
+    # pypelay.make_sims(PATH / 'R120_dyn.dat')
+
+    # Run dynamic analysis
+    # pypelay.run_sims(ncpu=8)
+
+    # Post-process
+    # pypelay.postprocess(PATH / 'summary.xlsx')
+
+
+if __name__ == "__main__":
+    main()
+
 ```
 
 ### Fetch input files
@@ -28,7 +84,7 @@ or they can be obtained with [fetch_files][pypelay.fetch_files]:
 pypelay.fetch_files()
 ```
 
-This will copy the below files into your workspace folder. Update the 
+This will copy the below files into your project folder. Update the 
 *pipe.dat* and *options.xlsx* files with your project data.
 Instructions for populating the *environment.xlsx* spreadsheet are
 given [below](#specify-environment). This can be done any time before
@@ -50,11 +106,15 @@ pypelay.list_raos()
 ```
 
 Select the vessel, vessel type and draft from the RAO list, and 
-create the vessel:
+create the vessel. 
 
 ```python
 vessel = pypelay.Vessel('S1200', 'vt S1200', 'Draft_7.4m')
 ```
+
+Note that this line should remain uncommented since
+it is required as an input to the *select_radius* and *set_radius*
+commands.
 
 ## Select stinger radius
 The fasest way to obtain the optimum stinger radius is using

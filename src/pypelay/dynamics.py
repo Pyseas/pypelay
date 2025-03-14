@@ -424,24 +424,35 @@ def run_sims(ncpu: int, rerun: list[int] | None = None):
 
 def result_summary(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     # Columns
-    cols_static = ['dirn_name']
-    cols_dyn = ['dirn_name']
-    for col in cols:
-        if col + ' max' in df.columns:
-            cols_static.append(col + ' static')
-            cols_dyn.append(col + ' max')
-        if col + ' min' in df.columns:
-            cols_static.append(col + ' static')
-            cols_dyn.append(col + ' min')
+    # cols_static = ['dirn_name']
+    # cols_dyn = ['dirn_name']
+    # for col in cols:
+    #     if col + ' max' in df.columns:
+    #         cols_static.append(col + ' static')
+    #         cols_dyn.append(col + ' max')
+    #     if col + ' min' in df.columns:
+    #         cols_static.append(col + ' static')
+    #         cols_dyn.append(col + ' min')
 
     # Static
     # cols_static = ['dirn_name'] + [x + ' static' for x in cols]
-    res0 = df[cols_static]
-    res0.columns = cols_dyn
-    res0.loc[:, 'dirn_name'] = 'static'
-    res1 = df[cols_dyn]
+    # res0 = df[cols_static]
+    # res0.columns = cols_dyn
+    # res0.loc[:, 'dirn_name'] = 'static'
+    # res1 = df[cols_dyn]
     # res3.columns = ['dirn_name'] + cols
-    res2 = pd.concat((res0, res1)).drop_duplicates()
+    # res2 = pd.concat((res0, res1)).drop_duplicates()
+
+    filtered = ['hs', 'dirn_name', 'cspd']
+    midx = [('sim', x) for x in filtered]
+    for col in df.columns:
+        for var in cols:
+            if var in col:
+                filtered += [col]
+                midx += [(var, col.split()[-1])]
+    res2 = df[filtered]
+    midx = pd.MultiIndex.from_tuples(midx)
+    res2.columns = pd.MultiIndex.from_tuples(midx)
 
     return res2
 
@@ -460,25 +471,27 @@ def postprocess(outpath: Path) -> None:
     for col in df.columns:
         if col.split()[-1] in ['static', 'max', 'min']:
             aggs[col] = 'mean'
-    res0 = df.groupby(['hs', 'tp', 'dirn']).agg(aggs)
+    res0 = df.groupby(['hs', 'tp', 'dirn', 'cspd', 'cdirn']).agg(aggs)
     res0.reset_index(inplace=True)
     res0.sort_values(['tp', 'dirn'], inplace=True)
     # res0.to_excel(PATH / 'summary_1.xlsx', index=False)
     row_order = res0['dirn_name'].unique().tolist()
 
-    # Group by dirn_name
+    # Group by hs, cspd, dirn_name
+    # lookup = {'max': 'max', 'min': 'min'}
     lookup = {'static': 'max', 'max': 'max', 'min': 'min'}
     aggs = {}
     for col in df.columns:
         if col.split()[-1] in lookup.keys():
             aggs[col] = lookup[col.split()[-1]]
-    res1 = res0.groupby('dirn_name').agg(aggs)
-    res1 = res1.loc[row_order]
+    res1 = res0.groupby(['hs', 'dirn_name', 'cspd']).agg(aggs)
+    res1.sort_values(['hs', 'cspd', 'dirn_name'], inplace=True)
+    # res1 = res1.loc[row_order]
     res1.reset_index(inplace=True)
 
     # Layback and clearances
-    cols = ['layback', 'scope', 'pipe_gain',
-            'tip_clearance', 'seabed_clearance']
+    cols = ['layback', 'scope', 'pipe_gain', 'tip_clearance',
+            'seabed_clearance']
     res2 = result_summary(res1, cols)
 
     # Tensions and roller loads
@@ -498,12 +511,12 @@ def postprocess(outpath: Path) -> None:
     res5 = result_summary(res1, cols)
 
     with pd.ExcelWriter(outpath) as writer:
-        res0.to_excel(writer, sheet_name='Avg 5 seeds', index=False)
+        res0.to_excel(writer, sheet_name='Seeds avg.', index=False)
         res1.to_excel(writer, sheet_name='Group by dirn', index=False)
-        res2.to_excel(writer, sheet_name='Layback, clearance', index=False)
-        res3.to_excel(writer, sheet_name='Tensions, roller loads', index=False)
-        res4.to_excel(writer, sheet_name='Stress and strain', index=False)
-        res5.to_excel(writer, sheet_name='F101', index=False)
+        res2.to_excel(writer, sheet_name='Layback, clearance')
+        res3.to_excel(writer, sheet_name='Tensions, roller loads')
+        res4.to_excel(writer, sheet_name='Stress and strain')
+        res5.to_excel(writer, sheet_name='F101')
 
 def main():
     pass

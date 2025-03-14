@@ -1,5 +1,5 @@
 from .stinger import *
 from .prelim import *
 from .drawings import *
-from .waves import *
+from .wave_search import *
 from .dynamics import *

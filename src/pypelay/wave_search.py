@@ -254,19 +254,6 @@ def wave_search(ncpu: int=8) -> None:
         ncpu (int): Number of CPU cores to use
 
     """
-
-    xlpath = PATH / 'environment.xlsx'
-
-    df = pd.read_excel(xlpath, sheet_name='wave_search')
-
-    sims = []
-    for dic in df.to_dict('records'):
-        sims.append(Sim(**dic))
-
-    nsim = len(sims)
-
-    # print('Starting {0} sims with {1} processors'.format(nsim, ncpu))
-
     fpath = PATH / 'waves'
     if fpath.exists():
         response = input('waves folder already exists, delete contents (y/n)? : ')
@@ -278,6 +265,18 @@ def wave_search(ncpu: int=8) -> None:
             return
     else:
         fpath.mkdir()
+
+    xlpath = PATH / 'environment.xlsx'
+    df = pd.read_excel(xlpath, sheet_name='wave_search')
+
+    sims = []
+    nwave = 0
+    for dic in df.to_dict('records'):
+        nwave += dic['numseed']
+        sims.append(Sim(**dic))
+
+    nsim = len(sims)
+    print('Searching for {0} waves with {1} processors'.format(nwave, ncpu))
 
     with Pool(ncpu) as p:
         p.map(wavescreen, sims)

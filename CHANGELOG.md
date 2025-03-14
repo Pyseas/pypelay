@@ -10,11 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Pending
 
 ### Changed
 
-- Fixed deletion of tmp files in *select_radius*
+
+### Removed
+
+
+## [0.2.0] - 2025-03-14
+
+### Added
+
+- Vessel S3500
+
+### Changed
+
+- Post-processing updated to include current
+- Bugfix: Deletion of tmp files in *select_radius*
 
 ### Removed
 

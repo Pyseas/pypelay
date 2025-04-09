@@ -134,21 +134,22 @@ def write_dxf_ga(datpath: Path) -> None:
     # Reopen model since the roller positions in the first one are all messed up
     model = ofx.Model(datpath)
     line = model['Line1']
-    glob_x, glob_y = line.EndAX * 1000, line.EndAY * 1000
+    stinger_ref = model['b6 stinger_ref']
+    # glob_x, glob_y = line.EndAX * 1000, line.EndAY * 1000
     ltype = model[line.LineType[0]]
-    pipe_od = ltype.OD * 1000
+    pipe_od = ltype.OuterContactDiameter * 1000
     model.CalculateStatics()
     model.SaveSimulation(datpath.with_suffix('.sim'))
-    pipe_x = line.RangeGraph('X').Mean * 1000
-    pipe_y = line.RangeGraph('Z').Mean * 1000
-    pipe_x += glob_x - pipe_x[0]
-    pipe_y += glob_y - pipe_y[0]
+    ref_x = stinger_ref.StaticResult('X')
+    ref_y = stinger_ref.StaticResult('Z')
+    pipe_x = (line.RangeGraph('X').Mean - ref_x) * 1000
+    pipe_y = (line.RangeGraph('Z').Mean - ref_y) * 1000
     pipe_cl = []
     for xpos, ypos in zip(pipe_x, pipe_y):
         pipe_cl.append([xpos, ypos])
     
-    bop = list(offset_vertices_2d(pipe_cl, offset=pipe_od/2, closed=True))
     # msp.add_lwpolyline(pipe_cl)
+    bop = list(offset_vertices_2d(pipe_cl, offset=pipe_od/2, closed=True))
     msp.add_lwpolyline(bop)
 
     outpath = datpath.parent / f'{datpath.stem}_ga.dxf'

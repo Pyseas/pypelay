@@ -159,6 +159,12 @@ def list_raos(vessel_name: str | None = None):
 
 
 def static_summary(outpath, datpaths: list[Path]):
+    """Create spreadsheet with static results for one or multiple dat files.
+
+    Args:
+        outpath (Path): File path of new spreadsheet
+        datpaths list[Path]: List of dat file paths
+    """
 
     xlpath = Path(str(files('pypelay') / 'static_summary.xlsx'))
     wb = load_workbook(xlpath)

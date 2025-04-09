@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 
+## [0.2.1] - 2025-04-09
+
+### Added
+
+### Changed
+- Bugfix: Drawing of pipe BOP profile in *write_dxf* when not in Brake mode
+
+### Removed
+
+
 ## [0.2.0] - 2025-03-14
 
 ### Added

@@ -1,4 +1,9 @@
 # Installation
+
+## Orcaflex version
+*pypelay* is compatible with Orcaflex version 11.5a and above. It will not work
+correctly with earlier Orcaflex versions.
+
 ## Python environment
 *pypelay* is run using Python, and so requires a working Python environment.
 

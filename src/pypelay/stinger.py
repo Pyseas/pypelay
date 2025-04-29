@@ -184,6 +184,11 @@ def static_summary(outpath, datpaths: list[Path]):
 
         radius = float(stinger_ref.tags['radius']) / 1000
         num_section = int(stinger_ref.tags['num_section'])
+        st_angles = [-1, -1, -1]
+        for isec in range(3):
+            st_name = f'b6 stinger_{isec + 1}'
+            if st_name in all_names:
+                st_angles[isec] = model[st_name].InitialRotation3
 
         vname = stinger_ref.Connection
         ovessel = model[vname]
@@ -224,7 +229,7 @@ def static_summary(outpath, datpaths: list[Path]):
                 'Support contact clearance', objx)
         tip_clearance = float(clear) / 2
 
-        # Stinger draft and seabed clearance
+        # Static results
         last_section = model[f'b6 stinger_{num_section}']
         vertx = min(last_section.VertexX)
         objx = ofx.oeBuoy(vertx, 0, 0)
@@ -234,7 +239,7 @@ def static_summary(outpath, datpaths: list[Path]):
 
         # Code checks
         line_length = line.CumulativeLength[-1]
-        arc_ob = ofx.arSpecifiedArclengths(0, last_roller_arc)
+        arc_ob = ofx.arSpecifiedArclengths(20.0, last_roller_arc)
         arc_sag = ofx.arSpecifiedArclengths(last_roller_arc, line_length)
 
         code_checks = model['Code checks']
@@ -270,45 +275,65 @@ def static_summary(outpath, datpaths: list[Path]):
             support_loads.append(react)
             roller_depths.append(oroller.StaticResult('Z'))
 
+        # Pipe angles
+        rnames = ['SR1']
+        for isup, sup_load in enumerate(support_loads):
+            if sup_load < 1.0:
+                rnames.append(roller_names[isup - 1])
+                break
+        pipe_angles = []
+        for rname in rnames:
+            oroller = model[f'b6 {rname}']
+            roller_arc = float(oroller.tags['arc']) / 1000
+            pipe_angles.append(line.StaticResult(
+                'Declination', ofx.oeArcLength(roller_arc)) - 90.0)
+
         ws.cell(2, icol).value = dpath.stem
         ws.cell(3, icol).value = ' '.join(vname.split()[1:])
         ws.cell(4, icol).value = model.environment.WaterDepth
 
         ws.cell(7, icol).value = radius
         ws.cell(8, icol).value = num_section
+        irow = 9
+        for ang in st_angles:
+            if ang > 0:
+                ws.cell(irow, icol).value = ang
+            irow += 1
 
-        ws.cell(11, icol).value = ltype.OD * 1000
-        ws.cell(12, icol).value = ltype.WallThickness * 1000
-        ws.cell(13, icol).value = ltype.CoatingThickness * 1000
-        ws.cell(14, icol).value = ltype.CoatingMaterialDensity * 1000
-        ws.cell(15, icol).value = ltype.LiningThickness * 1000
-        ws.cell(16, icol).value = ltype.LiningMaterialDensity * 1000
-        ws.cell(17, icol).value = wt_in_air * 1000
-        ws.cell(18, icol).value = wt_submerged * 1000
+        ws.cell(14, icol).value = ltype.OD * 1000
+        ws.cell(15, icol).value = ltype.WallThickness * 1000
+        ws.cell(16, icol).value = ltype.CoatingThickness * 1000
+        ws.cell(17, icol).value = ltype.CoatingMaterialDensity * 1000
+        ws.cell(18, icol).value = ltype.LiningThickness * 1000
+        ws.cell(19, icol).value = ltype.LiningMaterialDensity * 1000
+        ws.cell(20, icol).value = wt_in_air * 1000
+        ws.cell(21, icol).value = wt_submerged * 1000
 
         # Static results
-        ws.cell(21, icol).value = bollard_pull
-        ws.cell(22, icol).value = top_tension
-        ws.cell(23, icol).value = layback
-        ws.cell(24, icol).value = scope_length
-        ws.cell(25, icol).value = pipe_gain
-        ws.cell(26, icol).value = tip_clearance
-        ws.cell(27, icol).value = draft
-        ws.cell(28, icol).value = seabed_clearance
+        ws.cell(24, icol).value = bollard_pull
+        ws.cell(25, icol).value = top_tension
+        ws.cell(26, icol).value = layback
+        ws.cell(27, icol).value = scope_length
+        ws.cell(28, icol).value = pipe_gain
+        ws.cell(29, icol).value = tip_clearance
+        ws.cell(30, icol).value = draft
+        ws.cell(31, icol).value = seabed_clearance
+        ws.cell(32, icol).value = pipe_angles[0]
+        ws.cell(33, icol).value = pipe_angles[1]
 
         # Pipe loads
-        ws.cell(31, icol).value = res_ob[0]
-        ws.cell(32, icol).value = res_ob[1]
-        ws.cell(33, icol).value = res_ob[2]
-        ws.cell(34, icol).value = res_sag[0]
-        ws.cell(35, icol).value = res_sag[1] / 1000  # vm stress
+        ws.cell(36, icol).value = res_ob[0]
+        ws.cell(37, icol).value = res_ob[1]
+        ws.cell(38, icol).value = res_ob[2]
+        ws.cell(39, icol).value = res_sag[0]
+        ws.cell(40, icol).value = res_sag[1] / 1000  # vm stress
 
-        irow = 38
+        irow = 43
         for load in support_loads:
             ws.cell(irow, icol).value = load
             irow += 1
 
-        irow = 54
+        irow = 59
         for depth in roller_depths:
             ws.cell(irow, icol).value = depth
             irow += 1
@@ -458,7 +483,7 @@ def select_radius(vessel: Vessel, num_section: int,
 
     vmodel.CalculateStatics()
 
-    lcc0 = line.RangeGraph('DNV OS F101 load controlled').Mean.max()
+    lcc0 = line.RangeGraph('DNV ST F101 load controlled').Mean.max()
 
     bp0 = -ovessel.StaticResult('Connections GX force')
     if bp0 < 10:
@@ -476,7 +501,7 @@ def select_radius(vessel: Vessel, num_section: int,
     for _ in range(10):
         ovessel.GlobalAppliedForceX[0] = bp1
         vmodel.CalculateStatics()
-        lcc1 = line.RangeGraph('DNV OS F101 load controlled').Mean.max()
+        lcc1 = line.RangeGraph('DNV ST F101 load controlled').Mean.max()
         if abs(lcc1 - lcc_target) < 0.005:
             break
         bp2 = (lcc_target - lcc0) / (lcc1 - lcc0) * (bp1 - bp0) + bp0
@@ -672,11 +697,14 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     # Connect line to roller at y_offset then change connection to stinger_ref
     line = model.CreateObject(ofx.ObjectType.Line, 'Line1')
     line.LayAzimuth = 0.0
-    line.NumberOfSections = 2
+    line.NumberOfSections = 3
     # Line overbend (first section) extends 10m past last roller
-    line.Length[0] = roller.arc / 1000 + 10.0
-    line.TargetSegmentLength[0] = opts.ob_seglen
-    line.TargetSegmentLength[1] = opts.seglen
+    ob_length = roller.arc / 1000 + 10.0
+    line.Length[0] = 20.0  # First section is for tensioner
+    line.TargetSegmentLength[0] = 20.0
+    line.Length[1] = ob_length - 20.0
+    line.TargetSegmentLength[1] = opts.ob_seglen
+    line.TargetSegmentLength[2] = opts.seglen
     line.FullStaticsMinDamping = 5.0
     line.FullStaticsMaxDamping = 20.0
 
@@ -697,7 +725,7 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     line.EndBX = end_a[0] - dx - length_on_seabed
     line.EndBHeightAboveSeabed = 0.0
 
-    line.Length[1] = susp_len + length_on_seabed
+    line.Length[2] = susp_len + length_on_seabed
     line.EndAConnection = 'b6 stinger_ref'
     line.EndAX = path_coords[-1, 0] / 1000
     line.EndAY = path_coords[-1, 1] / 1000
@@ -719,6 +747,9 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
         buoy.tags['post_angle'] = f'{roller.post_angle:.1f}'
         buoy.tags['r3'] = f'{roller.r3:.3f}'
         buoy.tags['arc'] = f'{roller.arc:.1f}'
+
+    # For first solve set rollers to soft
+    # set_roller_stiffness(model, 3000)
 
     # Solve statics, use calculated line shapes
     solved = False
@@ -750,9 +781,6 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     outstr += 'For details refer to "b6 stinger_ref" tags.'
     model.general.Comments = outstr
 
-    # datpath = PATH / 'sims' / f'LC_{sim.lc:05d}.dat'
-    # model.SaveData(sim.outpath)
-
     # Adjust bollard pull to get target tip clearance
     # (updates model, unsolved state)
     solved = set_bollard_pull(model, 'tip_clearance', sim.tip_clearance, tol=0.01)
@@ -764,6 +792,9 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
 
     if opts.tensioner_mode != 'Brake':
         add_deadband_winch(model, opts)
+
+    # Increase roller stiffness
+    set_roller_stiffness(model, 70e3)
 
     model.SaveData(sim.outpath)
 
@@ -789,7 +820,7 @@ def prep_for_dyn(datpath: Path) -> None:
     '''
     model = ofx.Model(datpath)
 
-    fix_rollers(model)
+    set_roller_pivots(model, option='dyn')
 
     ovessel = [obj for obj in model.objects if obj.typeName == 'Vessel'][0]
     ovessel.IncludedInStatics = 'None'
@@ -798,35 +829,68 @@ def prep_for_dyn(datpath: Path) -> None:
     model.SaveData(outpath)
 
 
-def fix_rollers(model: ofx.Model) -> None:
+def set_roller_stiffness(model: ofx.Model, stiffness: float) -> None:
+    '''Set stiffness of all support types'''
+    suptypes = [obj for obj in model.objects if 
+                obj.type == ofx.ObjectType.SupportType]
+    for stype in suptypes:
+        stype.NormalStiffness = stiffness
 
-    model.CalculateStatics()
 
+def set_roller_pivots(model: ofx.Model, option: str = 'dyn') -> None:
+    '''
+    Options:
+    1. fixed, release: Fix all roller pivots to theoretical angles
+    2. released: Release all rollers, set initial angles to theoretical
+    2. dyn: Fix roller positions for dynamic analysis
+    '''
     all_names = [obj.Name for obj in model.objects]
 
     roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
 
-    # Determine if roller angle needs to be set to r3 based on roller load
-    adjust_angle = {}
-    for rname in roller_names:
-        oroller = model[f'b6 {rname}']
-        nsup = oroller.NumberOfSupports
-        for isup in range(nsup):
-            objx = ofx.oeSupport(isup + 1)
-            sup_load = oroller.StaticResult('Support reaction force', objx)
-            adjust_angle[rname] = False
-            if sup_load < 0.1:
-                adjust_angle[rname] = True
-                break
+    match option:
+        case 'fixed':
+            for rname in roller_names:
+                oroller = model[f'b6 {rname}']
+                ocn = model[f'cn {rname}']
+                ocn.DOFFree[5] = 'No'
+                r3 = float(oroller.tags['r3'])
+                oroller.InitialRotation3 = r3
 
-    for rname in roller_names:
-        oroller = model[f'b6 {rname}']
-        ocn = model[f'cn {rname}']
-        oroller.Connection = ocn.Connection
-        if adjust_angle[rname]:
-            r3 = float(oroller.tags['r3'])
-            oroller.InitialRotation3 = r3
-        model.DestroyObject(ocn)
+        case 'released':
+            for rname in roller_names:
+                oroller = model[f'b6 {rname}']
+                ocn = model[f'cn {rname}']
+                ocn.DOFFree[5] = 'Yes'
+                r3 = float(oroller.tags['r3'])
+                ocn.DOFInitialValue[5] = r3
+                oroller.InitialRotation3 = 0.0
+
+        case 'dyn':
+            # Determine if roller angle needs to be set to r3 based on
+            # roller load
+            model.CalculateStatics()
+            adjust_angle = {}
+            for rname in roller_names:
+                adjust_angle[rname] = False
+                if option == 'dyn':
+                    oroller = model[f'b6 {rname}']
+                    nsup = oroller.NumberOfSupports
+                    for isup in range(nsup):
+                        objx = ofx.oeSupport(isup + 1)
+                        sup_load = oroller.StaticResult('Support reaction force', objx)
+                        if sup_load < 0.1:
+                            adjust_angle[rname] = True
+                            break
+
+            for rname in roller_names:
+                oroller = model[f'b6 {rname}']
+                ocn = model[f'cn {rname}']
+                oroller.Connection = ocn.Connection
+                if adjust_angle[rname]:
+                    r3 = float(oroller.tags['r3'])
+                    oroller.InitialRotation3 = r3
+                model.DestroyObject(ocn)
 
  
 def add_deadband_winch(model: ofx.Model, opts: StingerSetupOptions) -> None:
@@ -848,42 +912,41 @@ def add_deadband_winch(model: ofx.Model, opts: StingerSetupOptions) -> None:
         case 'Deadband: tension in t':
             deadband = opts.deadband * 9.81
 
-    cn = model.CreateObject(ofx.ObjectType.Constraint, name='cn tensioner')
-    cn.Connection = 'b6 stinger_ref'
-    cn.InFrameInitialX = line.EndAX
-    cn.InFrameInitialY = line.EndAY
-    cn.InFrameInitialAzimuth = 180
-    cn.InFrameInitialDeclination = 90
-    cn.InFrameInitialGamma = 180
-    cn.DOFFree[2] = 'Yes'
-    cn.DOFFree[3] = 'Yes'
+    # Create tensioner linetype
+    lt_tens = model.CreateObject(ofx.ObjectType.LineType, name='lt tensioner')
+    lt_tens.Category = 'General'
+    lt_pipe = model[line.LineType[0]]
+    lt_tens.OD = lt_pipe.OuterContactDiameter
+    lt_tens.ID = lt_pipe.ID
+    lt_tens.MassPerUnitLength = lt_pipe.MassPerUnitLength
+    lt_tens.EIx = 200E3
+    lt_tens.GJ = 140E3
+    lt_tens.EA = 1.0
+    line.Linetype[0] = 'lt tensioner'
 
+    # Create tensioner winch, both ends connected to pipe
     winch = model.CreateObject(ofx.ObjectType.Winch, name='w tensioner')
     winch.WinchType = 'Detailed'
-    winch.Connection[0] = 'b6 stinger_ref'
-    # x = top_tension * L / EA
-    winch.ConnectionX[0] = line.EndAX + 10.0 + top_tension * 1E-4
-    winch.ConnectionY[0] = line.EndAY
-    winch.ConnectionZ[0] = 0.0
-    winch.Connection[1] = 'cn tensioner'
-    winch.ConnectionX[1] = 0.0
-    winch.ConnectionY[1] = 0.0
-    winch.ConnectionZ[1] = 0.0
-    winch.WinchControlType = 'Whole simulation'
-    winch.StaticMode = 'Specified length'
-    winch.StaticValue = 10.0
-    winch.WholeSimulationControlMode = 'Specified tension'
-    winch.WholeSimulationTension = top_tension
+    for iconn in [0, 1]:
+        winch.Connection[iconn] = 'Line1'
+        for dof in ['X', 'Y', 'Z']:
+            winch.SetData(f'Connection{dof}', iconn, 0.0)
+    #     winch.ConnectionZ[0] = 0.0
+    # winch.Connection[1] = 'Line1'
+    winch.ConnectionZ[1] = 20.0
+
+    winch.WinchControlType = 'By stage'
+    winch.StageMode[0] = 'Specified length'
+    winch.StageValue[0] = 20.0
+    for istg in [1, 2]:
+        winch.StageMode[istg] = 'Specified tension change'
+        winch.StageValue[istg] = 0.0
+
     winch.Stiffness = 100E3
-    winch.Damping = 0.05
+    winch.Damping = 0.4
     winch.DriveDeadband = deadband
     winch.DriveDampingHaulIn = 0.1
     winch.DriveDampingPayOut = 0.1
-
-    line.EndAConnection = 'cn tensioner'
-    line.EndAAzimuth = 0.0
-    line.EndADeclination = 0.0
-    line.EndAGamma = 0.0
 
 
 def update_segmentation(model: ofx.Model, opts: StingerSetupOptions) -> None:
@@ -898,13 +961,14 @@ def update_segmentation(model: ofx.Model, opts: StingerSetupOptions) -> None:
 
     tdp_len = opts.tdp_len
 
-    # Section 1 is overbend, from start of line to 10m past last roller
+    # Section 1 is 20m single segment for tensioner winch
+    # Section 2 is overbend, from start of line to 10m past last roller
     # (does not change)
-    # Section 2 is up to TDP section
-    # Section 3 is TDP region
-    # Section 4 is from TDP region to end of line
+    # Section 3 is up to TDP section
+    # Section 4 is TDP region
+    # Section 5 is from TDP region to end of line
 
-    len0 = line.CumulativeLength[0]
+    len0 = line.CumulativeLength[1]
     line_length = line.CumulativeLength[-1]
 
     extends_to_tip = False
@@ -916,32 +980,32 @@ def update_segmentation(model: ofx.Model, opts: StingerSetupOptions) -> None:
         extends_to_end = True
 
     if all([extends_to_tip, extends_to_end]):
-        line.NumberOfSections = 2
-        line.Length[1] = line_length - len0
-        line.TargetSegmentLength[1] = opts.tdp_seglen
-
-    if all([extends_to_tip, not extends_to_end]):
         line.NumberOfSections = 3
-        line.Length[1] = tdp_arc + tdp_len / 2 - len0
-        line.TargetSegmentLength[1] = opts.tdp_seglen
-        line.Length[2] = line_length - (tdp_arc + tdp_len / 2)
-        line.TargetSegmentLength[2] = opts.seglen
-
-    if all([not extends_to_tip, extends_to_end]):
-        line.NumberOfSections = 3
-        line.Length[1] = tdp_arc - tdp_len / 2 - len0
-        line.TargetSegmentLength[1] = opts.seglen
-        line.Length[2] = line_length - (tdp_arc - tdp_len / 2)
+        line.Length[2] = line_length - len0
         line.TargetSegmentLength[2] = opts.tdp_seglen
 
-    if all([not extends_to_tip, not extends_to_end]):
+    if all([extends_to_tip, not extends_to_end]):
         line.NumberOfSections = 4
-        line.Length[1] = tdp_arc - tdp_len / 2 - len0
-        line.TargetSegmentLength[1] = opts.seglen
-        line.Length[2] = tdp_len
+        line.Length[2] = tdp_arc + tdp_len / 2 - len0
         line.TargetSegmentLength[2] = opts.tdp_seglen
         line.Length[3] = line_length - (tdp_arc + tdp_len / 2)
         line.TargetSegmentLength[3] = opts.seglen
+
+    if all([not extends_to_tip, extends_to_end]):
+        line.NumberOfSections = 4
+        line.Length[2] = tdp_arc - tdp_len / 2 - len0
+        line.TargetSegmentLength[2] = opts.seglen
+        line.Length[3] = line_length - (tdp_arc - tdp_len / 2)
+        line.TargetSegmentLength[3] = opts.tdp_seglen
+
+    if all([not extends_to_tip, not extends_to_end]):
+        line.NumberOfSections = 5
+        line.Length[2] = tdp_arc - tdp_len / 2 - len0
+        line.TargetSegmentLength[2] = opts.seglen
+        line.Length[3] = tdp_len
+        line.TargetSegmentLength[3] = opts.tdp_seglen
+        line.Length[4] = line_length - (tdp_arc + tdp_len / 2)
+        line.TargetSegmentLength[4] = opts.seglen
 
     line.StaticsStep1 = 'Catenary'
 
@@ -1084,10 +1148,10 @@ def get_setup_results(model: ofx.Model, datpath: Path) -> StingerSetupResults:
 
     last_roller_arc = float(oroller.tags['arc']) / 1000
     line_length = line.CumulativeLength[-1]
-    arc_ob = ofx.arSpecifiedArclengths(0, last_roller_arc)
+    arc_ob = ofx.arSpecifiedArclengths(20.0, last_roller_arc)
     arc_sag = ofx.arSpecifiedArclengths(last_roller_arc, line_length)
 
-    var = 'DNV OS F101 load controlled'
+    var = 'DNV ST F101 load controlled'
     code_checks.DNVSTF101GammaC = 0.8
     uc_ob = line.RangeGraph(var, None, None, arc_ob).Mean.max()
     code_checks.DNVSTF101GammaC = 1.0

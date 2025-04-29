@@ -63,7 +63,9 @@ def get_header() -> list[str]:
     header += ['seabed_clearance static', 'seabed_clearance min']
 
     for var in ['barge_roller_load', 'stinger_roller_load',
-                'strain_overbend', 'stress_tip', 'stress_sag',
+                'vm_strain_ob', 'vm_strain_tip', 'vm_strain_sag',
+                'vm_stress_ob', 'vm_stress_tip', 'vm_stress_sag',
+                'bend_strain_ob',
                 'f101a_overbend_dcc', 'f101a_overbend_lcc',
                 'f101a_tip', 'f101a_sag',
                 'f101b_overbend_dcc', 'f101b_overbend_lcc',
@@ -324,22 +326,29 @@ def run_orca(sim: Sim) -> None:
     ltype.DNVSTF101AlphaPm = 1.0
 
     tip_len = sim.stinger_tip_len / 2
-    arc_ob = ofx.arSpecifiedArclengths(0, last_roller_arc - tip_len)
+    arc_ob = ofx.arSpecifiedArclengths(20.0, last_roller_arc - tip_len)
     arc_st = ofx.arSpecifiedArclengths(last_roller_arc - tip_len,
                                        last_roller_arc + tip_len)
     arc_sb = ofx.arSpecifiedArclengths(last_roller_arc + tip_len,
                                        line_length)
 
     # Stress and strain
-    var = 'Worst ZZ strain'
-    static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
-    dyn = line.RangeGraph(var, 1, None, arc_ob).Max
-    results += [static.max(), dyn.max()]
-    var = 'Max von Mises stress'
-    for arc in [arc_st, arc_sb]:
+    var = 'Max pipelay von Mises strain'
+    for arc in [arc_ob, arc_st, arc_sb]:
         static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
         dyn = line.RangeGraph(var, 1, None, arc).Max
         results += [static.max(), dyn.max()]
+
+    var = 'Max von Mises stress'
+    for arc in [arc_ob, arc_st, arc_sb]:
+        static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
+        dyn = line.RangeGraph(var, 1, None, arc).Max
+        results += [static.max(), dyn.max()]
+
+    var = 'Max bending strain'
+    static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
+    dyn = line.RangeGraph(var, 1, None, arc_ob).Max
+    results += [static.max(), dyn.max()]
 
     for gamma_f, gamma_e in [[1.2, 0.7], [1.1, 1.3]]:
         codechecks.DNVSTF101GammaF = gamma_f
@@ -385,8 +394,8 @@ def run_sims(ncpu: int, rerun: list[int] | None = None):
     """Run dynamic simulations in parallel using *ncpu* CPU cores.
 
     If rerun is specified then the specified dat files will be created
-    in *rerun* folder. For example, rerun=[2, 5] will create dat files
-    *LC_00002.dat* and *LC_00005.dat*.
+    in *rerun* folder and the simulations will not be run. For example,
+    rerun=[2, 5] will create dat files *LC_00002.dat* and *LC_00005.dat*.
 
     Args:
         ncpu: Number of CPU cores to use
@@ -423,26 +432,7 @@ def run_sims(ncpu: int, rerun: list[int] | None = None):
 
 
 def result_summary(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
-    # Columns
-    # cols_static = ['dirn_name']
-    # cols_dyn = ['dirn_name']
-    # for col in cols:
-    #     if col + ' max' in df.columns:
-    #         cols_static.append(col + ' static')
-    #         cols_dyn.append(col + ' max')
-    #     if col + ' min' in df.columns:
-    #         cols_static.append(col + ' static')
-    #         cols_dyn.append(col + ' min')
-
-    # Static
-    # cols_static = ['dirn_name'] + [x + ' static' for x in cols]
-    # res0 = df[cols_static]
-    # res0.columns = cols_dyn
-    # res0.loc[:, 'dirn_name'] = 'static'
-    # res1 = df[cols_dyn]
-    # res3.columns = ['dirn_name'] + cols
-    # res2 = pd.concat((res0, res1)).drop_duplicates()
-
+    # Filter dataframe columns, add multi-index
     filtered = ['hs', 'dirn_name', 'cspd']
     midx = [('sim', x) for x in filtered]
     for col in df.columns:
@@ -500,7 +490,8 @@ def postprocess(outpath: Path) -> None:
     res3 = result_summary(res1, cols)
 
     # Stress and strain
-    cols = ['strain_overbend', 'stress_tip', 'stress_sag']
+    cols = ['vm_strain_ob', 'vm_strain_tip', 'vm_strain_sag',
+            'vm_stress_ob', 'vm_stress_tip', 'vm_stress_sag', 'bend_strain_ob']
     res4 = result_summary(res1, cols)
 
     # F101

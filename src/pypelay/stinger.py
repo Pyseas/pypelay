@@ -794,7 +794,7 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
         add_deadband_winch(model, opts)
 
     # Increase roller stiffness
-    set_roller_stiffness(model, 70e3)
+    # set_roller_stiffness(model, 70e3)
 
     model.SaveData(sim.outpath)
 
@@ -1084,7 +1084,7 @@ def set_bollard_pull(model: ofx.Model,
     bp1 = bp0 * 1.05
     vessel.IncludedInStatics = '3 DOF'
 
-    for _ in range(5):
+    for _ in range(10):
         vessel.GlobalAppliedForceX[0] = bp1
         # Solve statics, use calculated line shapes
         solved = False

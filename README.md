@@ -11,8 +11,10 @@
     ..\pypelay> mkdocs serve -t material
     ```
 
-- How to install editable version (test folder):
+- How to install editable version (working folder):
 
     ```
-    ..\test> uv pip install -e "pypelay @ ../pypelay"
+    ..\working> uv init
+    ..\working> uv add pandas
+    ..\working> uv pip install -e "pypelay @ ../pypelay"
     ```

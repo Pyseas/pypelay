@@ -794,7 +794,7 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
         add_deadband_winch(model, opts)
 
     # Increase roller stiffness
-    # set_roller_stiffness(model, 70e3)
+    set_roller_stiffness(model, 70e3)
 
     model.SaveData(sim.outpath)
 

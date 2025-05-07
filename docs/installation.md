@@ -17,5 +17,5 @@ The *pypelay* package is distributed as a *whl* file which is installed into the
 environment using pip. Ensure that the virtual environment is activated, for example:
 
 ```
-(.venv) C:\Users\totoro\my_project>pip install pypelay-0.2.2-py3-none-any.whl
+(.venv) C:\Users\totoro\my_project>pip install pypelay-0.2.3-py3-none-any.whl
 ```

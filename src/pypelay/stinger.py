@@ -123,15 +123,21 @@ class LineType:
     def weights(self, contents_density: float) -> tuple[float, float]:
         pipe_wt = np.pi / 4 * (self.OD**2 - self.ID**2) * 7.85
         # Coating
-        coating_od = self.OD + 2 * self.CoatingThickness
-        coating_id = self.OD
-        coating_wt = (np.pi / 4 * (coating_od**2 - coating_id**2) *
-                      self.CoatingMaterialDensity)
+        coating_wt = 0.0
+        coating_od = self.OD
+        if self.CoatingThickness > 0.0:
+            coating_od = self.OD + 2 * self.CoatingThickness
+            coating_id = self.OD
+            coating_wt = (np.pi / 4 * (coating_od**2 - coating_id**2) *
+                        self.CoatingMaterialDensity)
         # Lining
-        lining_od = self.ID
-        lining_id = self.ID - 2 * self.LiningThickness
-        lining_wt = (np.pi / 4 * (lining_od**2 - lining_id**2) *
-                      self.LiningMaterialDensity)
+        lining_wt = 0.0
+        lining_id = self.ID
+        if self.LiningThickness > 0.0:
+            lining_od = self.ID
+            lining_id = self.ID - 2 * self.LiningThickness
+            lining_wt = (np.pi / 4 * (lining_od**2 - lining_id**2) *
+                        self.LiningMaterialDensity)
 
         wt_in_air = pipe_wt + coating_wt + lining_wt
         contents_wt = np.pi / 4 * lining_id**2 * contents_density
@@ -302,10 +308,12 @@ def static_summary(outpath, datpaths: list[Path]):
 
         ws.cell(14, icol).value = ltype.OD * 1000
         ws.cell(15, icol).value = ltype.WallThickness * 1000
-        ws.cell(16, icol).value = ltype.CoatingThickness * 1000
-        ws.cell(17, icol).value = ltype.CoatingMaterialDensity * 1000
-        ws.cell(18, icol).value = ltype.LiningThickness * 1000
-        ws.cell(19, icol).value = ltype.LiningMaterialDensity * 1000
+        if ltype.CoatingThickness > 0.0:
+            ws.cell(16, icol).value = ltype.CoatingThickness * 1000
+            ws.cell(17, icol).value = ltype.CoatingMaterialDensity * 1000
+        if ltype.LiningThickness > 0.0:
+            ws.cell(18, icol).value = ltype.LiningThickness * 1000
+            ws.cell(19, icol).value = ltype.LiningMaterialDensity * 1000
         ws.cell(20, icol).value = wt_in_air * 1000
         ws.cell(21, icol).value = wt_submerged * 1000
 

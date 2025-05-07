@@ -17,6 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 
+## [0.2.3] - 2025-05-07
+
+### Added
+- 
+
+### Changed
+- Bugfix: Fixed handling of zero coating/lining thickness
+- Bugfix: Fixed drawings of BOP profile after adding tensioner
+
+### Removed
+
+
 ## [0.2.2] - 2025-04-30
 
 ### Added

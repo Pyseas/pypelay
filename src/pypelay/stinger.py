@@ -759,6 +759,11 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     # For first solve set rollers to soft
     # set_roller_stiffness(model, 3000)
 
+    # Move anchor for large stinger radii
+    # set_roller_pivots(model, option='fixed')
+    if radius > 240000:
+        line.EndBX += -10
+
     # Solve statics, use calculated line shapes
     solved = False
     for _ in range(5):
@@ -1076,6 +1081,7 @@ def set_bollard_pull(model: ofx.Model,
 
     line = model['Line1']
     vessel = [obj for obj in model.objects if obj.typeName == 'Vessel'][0]
+    # vessel.InitialX += 20
 
     model.CalculateStatics()
 

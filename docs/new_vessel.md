@@ -3,20 +3,27 @@ New vessel stinger setup functions are in prelim.py
 
 ``` py
     vessel = pypelay.Vessel('S1200', draft=7400)
-    pypelay.valid_configs_to_df(vessel)
-    pypelay.solve_configs()
+    # radii = list(np.linspace(80, 250, 35) * 1000)
+    # radii += list(np.linspace(260, 350, 10) * 1000)
+    # radii += list(np.linspace(370, 550, 10) * 1000)
+    pypelay.valid_configs_to_df(vessel, radii)
+    # Move valid_configs spreadsheet into new *configs* folder
+    pypelay.solve_configs(vessel, radii)
     pypelay.combine_configs()
     pypelay.sort_configs()
-    pypelay.plot_configs(num_section=3)
+    pypelay.plot_configs(num_section=3, radii=radii)
 ```
 
 ## valid_configs_to_df
 - Calculate pipe paths, based on stinger radius, straight and transition lengths.
 - For each pipe path find valid stinger settings, for 1-2-3 stinger sections (section angles, roller heights)
-- Total # configs ~18400
+- Total # configs can be very large 10000+
+
+**IMPORTANT**
+Manually add lc column to *valid_configs.xlsx*. Avoids headaches with following steps.
 
 ## solve_configs
-Solve all 18400 configs in parallel, using input water depth and stinger tip clearance. Iterate bollard pull to get target tip clearance.
+Solve all configs in parallel, using input water depth and stinger tip clearance. Iterate bollard pull to get target tip clearance.
 
 Water depth comes from a made up formula, best fit to some early estimates of water depth vs stinger radius:
 

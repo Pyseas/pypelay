@@ -18,7 +18,7 @@ __all__ = ['valid_configs_to_df', 'solve_configs', 'combine_configs',
            'sort_configs', 'plot_configs']
 
 
-def plot_configs(num_section):
+def plot_configs(num_section: int, radii: list[float]) -> None:
 
     # Get preferred config for each radius
     prefer = pd.read_excel(PATH / 'configs' / 'preferred.xlsx')
@@ -32,8 +32,10 @@ def plot_configs(num_section):
 
     to_plot = []
     prefer = []
-    for rad in np.linspace(80000, 250000, 35):
+    for rad in radii:
         df2 = df[(df['radius'] == rad) & (df['num_section'] == num_section)]
+        if len(df2) == 0:
+            continue
         row = int(ind[rad/1000])
         to_plot.append([rad, df2['tip_angle'].iloc[row]])
         prefer.append(df2['lc'].iloc[row])
@@ -81,11 +83,13 @@ def sort_configs():
 def combine_configs():
 
     # Combine result spreadsheets into a single spreadsheet
-    xlpaths = []
-    for radius in np.linspace(80, 250, 35) * 1000:
-        for num_section in [1, 2, 3]:
-            xlname = f'configs_{num_section}_{radius/1000:.0f}.xlsx'
-            xlpaths.append(PATH / 'configs' / xlname)
+    # xlpaths = []
+    # for radius in np.linspace(80, 250, 35) * 1000:
+    #     for num_section in [1, 2, 3]:
+    #         xlname = f'configs_{num_section}_{radius/1000:.0f}.xlsx'
+    #         xlpaths.append(PATH / 'configs' / xlname)
+
+    xlpaths = (PATH / 'configs').glob('configs_*.xlsx')
 
     dfs = []
     for p in xlpaths:
@@ -97,11 +101,11 @@ def combine_configs():
     df.to_excel(PATH / 'configs' / 'solved_configs.xlsx', index=False)
 
 
-def solve_configs(vessel):
+def solve_configs(vessel: Vessel, radii: list[float]) -> None:
 
     df = pd.read_excel(PATH / 'configs' / 'valid_configs.xlsx')
 
-    for radius in np.linspace(80, 250, 35) * 1000:
+    for radius in radii:
     # for radius in np.linspace(145, 150, 2) * 1000:
         for num_section in [1, 2, 3]:
             df2 = df[(df['radius'] == radius) &
@@ -118,6 +122,7 @@ def solve_configs(vessel):
             tip_clearance = 0.2
 
             sims = []
+            # df2.loc[:, 'lc'] = [x + 1 for x in range(len(df2))]
             for row in df2.itertuples():
                 outpath = PATH / 'sims' / f'LC_{row.lc:05d}.dat'
                 sims.append(
@@ -135,7 +140,7 @@ def solve_configs(vessel):
                 lc = int(res.outpath.stem.split('_')[1])
                 res_table.append([lc] + list(astuple(res))[1:])
 
-            cols = ['lc', 'uc_ob', 'uc_sag', 'tip_depth', 'tip_angle', 'draft']
+            cols = ['lc', 'top_tension', 'uc_ob', 'uc_sag', 'tip_depth', 'tip_angle', 'draft']
             res = pd.DataFrame(res_table, columns=cols)
             df2 = df2.merge(res)
 
@@ -158,13 +163,13 @@ def get_valid_configs(sim) -> list[list[float]]:
     return results
 
 
-def valid_configs_to_df(vessel: Vessel) -> None:
+def valid_configs_to_df(vessel: Vessel, radii: list[float]) -> None:
     ''' Finds valid stinger configurations for all stinger radii
         (and num_section) and saves them to valid_configs.xlsx
         stinger_config =
             radius, num_section, straight, transition, ang1, ang2'''
     configs = []
-    for radius in np.linspace(80, 250, 35) * 1000:
+    for radius in radii:
         for num_section in [1, 2, 3]:
             print(radius, num_section)
             # Create base case model

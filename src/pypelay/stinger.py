@@ -69,10 +69,11 @@ class Vessel:
 class StingerSetupArgs:
     inpath: Path
     outpath: Path
-    straight: float
-    transition: float
-    ang1: float
-    ang2: float
+    config: dict
+    # straight: float xxx
+    # transition: float
+    # ang1: float
+    # ang2: float
     water_depth: float
     tip_clearance: float
     delete_dat: bool = False
@@ -283,9 +284,11 @@ def static_summary(outpath, datpaths: list[Path]):
 
         # Pipe angles
         rnames = ['SR1']
-        for isup, sup_load in enumerate(support_loads):
-            if sup_load < 1.0:
-                rnames.append(roller_names[isup - 1])
+        nroller = len(roller_names)
+        for irlr in range(nroller):
+            sup_load = support_loads[nroller - 1 - irlr]
+            if sup_load > 1.0:
+                rnames.append(roller_names[nroller - 1 - irlr])
                 break
         pipe_angles = []
         for rname in rnames:
@@ -302,7 +305,7 @@ def static_summary(outpath, datpaths: list[Path]):
         ws.cell(8, icol).value = num_section
         irow = 9
         for ang in st_angles:
-            if ang > 0:
+            if ang > -1:
                 ws.cell(irow, icol).value = ang
             irow += 1
 
@@ -407,14 +410,13 @@ def set_radius(vessel: Vessel, num_section: int, radius: float,
 
     # Find closest radius
     ind = (df['radius'] - radius).abs().argmin()
-    row = df.iloc[ind].to_dict()
+    config = df.iloc[ind].to_dict()
 
-    model = get_base_case(vessel, row['radius'], num_section)
+    model = get_base_case(vessel, config['radius'], num_section)
 
     stargs = StingerSetupArgs(
-        PATH / 'base case.dat', outpath,
-        row['straight'], row['transition'], row['ang1'], row['ang2'],
-        water_depth, tip_clearance, delete_dat=False
+        PATH / 'base case.dat', outpath, config, water_depth,
+        tip_clearance, delete_dat=False
     )
 
     res = stinger_setup(stargs)
@@ -551,19 +553,18 @@ def select_radius(vessel: Vessel, num_section: int,
     toggle = 0
     radii = [0, 0]
     for i in range(5):
-        row = df.iloc[ind].to_dict()
-        radius = row['radius']
+        config = df.iloc[ind].to_dict()
+        radius = config['radius']
 
-        model = get_base_case(vessel, row['radius'], num_section)
+        model = get_base_case(vessel, radius, num_section)
 
         outpath = PATH / f'tmp{toggle}.dat'
         radii[toggle] = radius
         toggle = 1 - toggle
 
         stargs = StingerSetupArgs(
-            PATH / 'base case.dat', outpath,
-            row['straight'], row['transition'], row['ang1'], row['ang2'],
-            water_depth, tip_clearance, delete_dat=False
+            PATH / 'base case.dat', outpath, config, water_depth,
+            tip_clearance, delete_dat=False
         )
 
         res = stinger_setup(stargs)
@@ -670,7 +671,6 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
      - Update segmentation around TDP
      - Add deadband winch if needed
     '''
-
     model = ofx.Model(sim.inpath)
     # print(sim.outpath)
 
@@ -679,26 +679,37 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
 
     model.environment.WaterDepth = sim.water_depth
 
+    ang1 = sim.config['ang1']
+    ang2 = sim.config['ang2']
+    straight = sim.config['straight']
+    transition = sim.config['transition']
+
     # Set stinger section angles
     stinger_ref = model['b6 stinger_ref']
     num_section = int(stinger_ref.tags['num_section'])
     radius = int(stinger_ref.tags['radius'])
-    model['b6 stinger_1'].InitialRotation3 = sim.ang1
+    model['b6 stinger_1'].InitialRotation3 = ang1
     if num_section > 1:
-        model['b6 stinger_2'].InitialRotation3 = sim.ang2
+        model['b6 stinger_2'].InitialRotation3 = ang2
 
     # Set roller heights and angles
-    path_coords = calc_path_coords(model, sim.straight, sim.transition)
-    rollers = get_roller_heights(model, path_coords, sim.ang1, sim.ang2)
+    path_coords = calc_path_coords(model, straight, transition)
+    rollers = get_roller_heights(model, path_coords, ang1, ang2)
 
     if not rollers:
         print('Stinger config not valid, roller heights outside limits')
         return StingerSetupResults(sim.outpath)
-
+    
     for roller in rollers:
         oroller = model[f'cn {roller.name}']
         oroller.InitialY = roller.y / 1000
         oroller.DOFInitialValue[5] = roller.r3
+        # Manual roller height adjustments
+        if roller.name in sim.config:
+            manual_roller_y = sim.config[roller.name]
+            if np.isnan(manual_roller_y):
+                continue
+            oroller.InitialY = manual_roller_y / 1000
 
     # Create line
     roller = rollers[-1]
@@ -762,7 +773,7 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     # Move anchor for large stinger radii
     # set_roller_pivots(model, option='fixed')
     if radius > 240000:
-        line.EndBX += -10
+        line.EndBX += -12
 
     # Solve statics, use calculated line shapes
     solved = False
@@ -787,8 +798,8 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     buoy = model['b6 stinger_ref']
     buoy.tags['date'] = datetime.datetime.now().strftime('%Y-%m-%d')
     # buoy.tags['pipe_od'] = f'{pipe_od:.1f}'
-    buoy.tags['straight'] = f'{sim.straight:.1f}'
-    buoy.tags['transition'] = f'{sim.transition:.1f}'
+    buoy.tags['straight'] = f'{straight:.1f}'
+    buoy.tags['transition'] = f'{transition:.1f}'
 
     outstr = f'Stinger configuration generated with Python pipelay module.\n'
     outstr += 'For details refer to "b6 stinger_ref" tags.'
@@ -1081,7 +1092,6 @@ def set_bollard_pull(model: ofx.Model,
 
     line = model['Line1']
     vessel = [obj for obj in model.objects if obj.typeName == 'Vessel'][0]
-    # vessel.InitialX += 20
 
     model.CalculateStatics()
 
@@ -1129,8 +1139,10 @@ def set_bollard_pull(model: ofx.Model,
             break
 
         bp2 = (target_val - res0) / (res1 - res0) * (bp1 - bp0) + bp0
-        # New BP limited to double old BP to avoid too large jump
-        bp2 = min([float(x) for x in [bp1 * 2, bp2]])
+        # Bound the new BP to avoid too large jump
+        bp2 = max(bp1 / 2, min(bp1 * 2, bp2))
+        # print(bp0, bp1, bp2)
+        # bp2 = min([float(x) for x in [bp1 * 2, bp2]])
         bp0, bp1 = bp1, bp2
         res0 = res1
 
@@ -1246,6 +1258,9 @@ def get_roller_heights(
 
     all_names = [obj.Name for obj in model.objects]
 
+    stinger_ref = model['b6 stinger_ref']
+    radius = int(stinger_ref.tags['radius'])
+
     # Set stinger angles
     model['b6 stinger_1'].InitialRotation3 = ang1
     if 'b6 stinger_2' in all_names:
@@ -1255,6 +1270,7 @@ def get_roller_heights(
     pipe_od = ltypes[0].OD
 
     roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
+    # roller_names = [x[3:] for x in all_names if x[:5] in ['b6 SR']] xxx
     nroller = len(roller_names)
 
     rollers = []
@@ -1322,7 +1338,7 @@ def get_roller_heights(
         segdists = np.hypot(np.diff(xdash), np.diff(ydash))
         roller_data.arc = segdists.sum()
 
-        if ymin <= y_roller <= ymax:
+        if (ymin - yincr/2) <= y_roller <= (ymax + yincr/2):
             # Adjust roller height to nearest pin hole
             nhole = round((ymax - ymin) / yincr + 1)
             y_hole = np.linspace(ymin, ymax, nhole)
@@ -1331,6 +1347,16 @@ def get_roller_heights(
             roller_data.y = y_roller
         else:
             return []
+        
+        # Just for finding new configs xxx
+        # Increase roller ymax in dat file, only when finding new configs
+        if radius >= 370000:
+            if rname == 'BR5':
+                if roller_data.y > 1425:
+                    roller_data.y = 1425
+        if rname == 'BR6':
+            if roller_data.y > 1000:
+                roller_data.y = 1000
 
         rollers.append(roller_data)
 

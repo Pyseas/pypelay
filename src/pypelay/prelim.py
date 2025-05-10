@@ -122,13 +122,17 @@ def solve_configs(vessel: Vessel, radii: list[float]) -> None:
             tip_clearance = 0.2
 
             sims = []
-            # df2.loc[:, 'lc'] = [x + 1 for x in range(len(df2))]
-            for row in df2.itertuples():
-                outpath = PATH / 'sims' / f'LC_{row.lc:05d}.dat'
+            # result = []
+            for config in df2.to_dict(orient="records"):
+                lc = int(config['lc'])
+                outpath = PATH / 'sims' / f'LC_{lc:05d}.dat'
+                # setup_args = StingerSetupArgs(
+                #         inpath, outpath, config, water_depth, tip_clearance,
+                #         delete_dat=True)
+                # result.append(stinger_setup(setup_args))
                 sims.append(
                     StingerSetupArgs(
-                        inpath, outpath, row.straight, row.transition,
-                        row.ang1, row.ang2, water_depth, tip_clearance,
+                        inpath, outpath, config, water_depth, tip_clearance,
                         delete_dat=True))
 
             with Pool(8) as p:
@@ -189,6 +193,7 @@ def valid_configs_to_df(vessel: Vessel, radii: list[float]) -> None:
 
             sims = []
             for straight in np.linspace(0, 10000, 6):
+            # for straight in [0, 2000]:
                 maxtrans = tensioner_x - straight
                 ntrans = round(maxtrans / 2000)
                 dtrans = maxtrans / ntrans

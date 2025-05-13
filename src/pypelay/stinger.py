@@ -110,40 +110,52 @@ class StingerSetupResults:
 @dataclass
 class LineType:
     Name: str
+    Mass: float
     OD: float
     ID: float
     CoatingThickness: float
     CoatingMaterialDensity: float
     LiningThickness: float
     LiningMaterialDensity: float
+    CWC: str
+    SNIF: float
     WallThickness: float = field(init=False)
 
     def __post_init__(self):
         self.WallThickness = (self.OD - self.ID) / 2
 
     def weights(self, contents_density: float) -> tuple[float, float]:
-        pipe_wt = np.pi / 4 * (self.OD**2 - self.ID**2) * 7.85
-        # Coating
-        coating_wt = 0.0
-        coating_od = self.OD
-        if self.CoatingThickness > 0.0:
-            coating_od = self.OD + 2 * self.CoatingThickness
-            coating_id = self.OD
-            coating_wt = (np.pi / 4 * (coating_od**2 - coating_id**2) *
-                        self.CoatingMaterialDensity)
-        # Lining
-        lining_wt = 0.0
-        lining_id = self.ID
-        if self.LiningThickness > 0.0:
-            lining_od = self.ID
-            lining_id = self.ID - 2 * self.LiningThickness
-            lining_wt = (np.pi / 4 * (lining_od**2 - lining_id**2) *
-                        self.LiningMaterialDensity)
+        if self.CWC == 'Yes':
+            wt_in_air = self.Mass
+            lining_id = self.ID
+            if self.LiningThickness > 0.0:
+                lining_id = self.ID - 2 * self.LiningThickness
+            contents_wt = np.pi / 4 * lining_id**2 * contents_density
+            disp = np.pi / 4 * self.OD**2 * 1.025
+        else:
+            pipe_wt = np.pi / 4 * (self.OD**2 - self.ID**2) * 7.85
+            # Coating
+            coating_wt = 0.0
+            coating_od = self.OD
+            if self.CoatingThickness > 0.0:
+                coating_od = self.OD + 2 * self.CoatingThickness
+                coating_id = self.OD
+                coating_wt = (np.pi / 4 * (coating_od**2 - coating_id**2) *
+                            self.CoatingMaterialDensity)
+            # Lining
+            lining_wt = 0.0
+            lining_id = self.ID
+            if self.LiningThickness > 0.0:
+                lining_od = self.ID
+                lining_id = self.ID - 2 * self.LiningThickness
+                lining_wt = (np.pi / 4 * (lining_od**2 - lining_id**2) *
+                            self.LiningMaterialDensity)
 
-        wt_in_air = pipe_wt + coating_wt + lining_wt
-        contents_wt = np.pi / 4 * lining_id**2 * contents_density
-        disp = np.pi / 4 * coating_od**2 * 1.025
-        wt_submerged = wt_in_air - disp - contents_wt
+            wt_in_air = pipe_wt + coating_wt + lining_wt
+            contents_wt = np.pi / 4 * lining_id**2 * contents_density
+            disp = np.pi / 4 * coating_od**2 * 1.025
+
+        wt_submerged = wt_in_air + contents_wt - disp
 
         return wt_in_air, wt_submerged
 
@@ -172,12 +184,14 @@ def static_summary(outpath, datpaths: list[Path]):
         outpath (Path): File path of new spreadsheet
         datpaths list[Path]: List of dat file paths
     """
-
     xlpath = Path(str(files('pypelay') / 'static_summary.xlsx'))
     wb = load_workbook(xlpath)
     ws = wb['Sheet1']
     # style_str = NamedStyle(name='style_str')
     # style_str.alignment = Alignment(vertical='center', horizontal='center')
+
+    opts = get_options()
+    tip_len = opts.tip_len
 
     icol = 3
     for dpath in datpaths:
@@ -202,12 +216,47 @@ def static_summary(outpath, datpaths: list[Path]):
         bollard_pull = ovessel.GlobalAppliedForceX[0]
 
         # Pipe data
-        oltype = [obj for obj in model.objects
-                 if obj.typeName == 'Line type'][0]
+        oltype = [obj for obj in model.objects if
+                  obj.typeName == 'Line type'][0]  # First linetype in model
+
+        if oltype.Category == 'General':
+            # Concrete coated
+            cwc_tags = ['cwc thickness (m)', 'cwc density (t/m^3)',
+                        'lining thickness (m)', 'lining density (t/m^3)',
+                        'snif', 'stress-strain table']
+            if not all(k in oltype.tags for k in cwc_tags):
+                outstr = 'Pipe linetype is missing one or more tags: '
+                outstr += ', '.join([x for x in cwc_tags])
+                print(outstr)
+                return
+            mass = oltype.MassPerUnitLength
+            pipe_od = oltype.StressOD
+            pipe_id = oltype.StressID
+            if pipe_id == ofx.OrcinaDefaultReal():
+                pipe_id = oltype.ID
+            coating_thk = float(oltype.tags['cwc thickness (m)'])
+            coating_dens = float(oltype.tags['cwc density (t/m^3)'])
+            lining_thk = float(oltype.tags['lining thickness (m)'])
+            lining_dens = float(oltype.tags['lining density (t/m^3)'])
+            cwc = 'Yes'
+            snif = float(oltype.tags['snif'])
+        elif oltype.Category == 'Homogeneous pipe':
+            mass = oltype.MassPerUnitLength
+            pipe_od = oltype.OD
+            pipe_id = oltype.ID
+            coating_thk = oltype.CoatingThickness
+            coating_dens = oltype.CoatingMaterialDensity
+            lining_thk = oltype.LiningThickness
+            lining_dens = oltype.LiningMaterialDensity
+            cwc = 'No'
+            snif = 1.0
+        else:
+            print('Linetype category must be "General" or "Homogeneous pipe"')
+            return
+
         ltype = LineType(
-            oltype.Name, oltype.OD, oltype.ID,
-            oltype.CoatingThickness, oltype.CoatingMaterialDensity,
-            oltype.LiningThickness, oltype.LiningMaterialDensity)
+            oltype.Name, mass, pipe_od, pipe_id, coating_thk, coating_dens,
+            lining_thk, lining_dens, cwc, snif)
         wt_in_air, wt_submerged = ltype.weights(0.0)
 
         roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
@@ -244,30 +293,65 @@ def static_summary(outpath, datpaths: list[Path]):
         depth = model.environment.WaterDepth
         seabed_clearance = depth - draft
 
-        # Code checks
+        # PIPE STRESS, STRAIN and CODE CHECKS -----------------------------
+        codechecks = model['Code checks']
+        oltype.DNVSTF101AlphaPm = 1.0
+        youngs_mod = oltype.DNVSTF101E
+
         line_length = line.CumulativeLength[-1]
-        arc_ob = ofx.arSpecifiedArclengths(20.0, last_roller_arc)
-        arc_sag = ofx.arSpecifiedArclengths(last_roller_arc, line_length)
 
-        code_checks = model['Code checks']
-        code_checks.DNVSTF101GammaF = 1.2
-        code_checks.DNVSTF101GammaE = 0.7
+        arc_ob = ofx.arSpecifiedArclengths(20.0, last_roller_arc - tip_len)
+        arc_st = ofx.arSpecifiedArclengths(last_roller_arc - tip_len,
+                                        last_roller_arc + tip_len)
+        arc_sb = ofx.arSpecifiedArclengths(last_roller_arc + tip_len,
+                                        line_length)
 
-        # Overbend
-        code_checks.DNVSTF101GammaC = 0.8
-        vars = ['DNV ST F101 load controlled',
-                'DNV ST F101 disp. controlled',
-                'Worst ZZ strain']
-        res_ob = []
-        for var in vars:
-            res_ob.append(line.RangeGraph(var, None, None, arc_ob).Mean.max())
+        # Stress and strain
+        stress_res = []
+        var = 'Max pipelay von Mises strain'
+        for arc in [arc_ob, arc_st, arc_sb]:
+            if snif > 1.0:
+                bend_strain = line.RangeGraph(
+                    'Max bending strain', ofx.pnStaticState, None, arc).Mean
+                tensile_strain = line.RangeGraph(
+                    'Direct tensile strain', ofx.pnStaticState, None, arc).Mean
+                worst_zz_strain = bend_strain * snif + tensile_strain
+                hoop_stress = line.RangeGraph(
+                    'Worst hoop stress', ofx.pnStaticState, None, arc).Mean
+                hoop_strain = hoop_stress / youngs_mod
+                mod_vm_strain = np.sqrt(worst_zz_strain**2 + hoop_strain**2 - 
+                                        worst_zz_strain * hoop_strain)
+                static = mod_vm_strain
+            else:
+                static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
+            # stress_res += [static.max()]
 
-        # Sag bend
-        code_checks.DNVSTF101GammaC = 1.0
-        vars = ['DNV ST F101 load controlled', 'Max von Mises stress']
-        res_sag = []
-        for var in vars:
-            res_sag.append(line.RangeGraph(var, None, None, arc_sag).Mean.max())
+        var = 'Max von Mises stress'
+        for arc in [arc_ob, arc_st, arc_sb]:
+            static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
+            stress_res += [static.max()]
+
+        var = 'Max bending strain'
+        static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
+        stress_res += [static.max()]
+
+        # Code checks
+        # Functional / Environmental
+        # a -> 1.2 / 0.7
+        # b -> 1.1 / 1.3
+        f101_res = []
+        for gamma_f, gamma_e in [[1.2, 0.7], [1.1, 1.3]]:
+            codechecks.DNVSTF101GammaF = gamma_f
+            codechecks.DNVSTF101GammaE = gamma_e
+            var = 'DNV ST F101 disp. controlled'
+            codechecks.DNVSTF101GammaC = 0.8
+            static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
+            f101_res += [static.max()]
+            var = 'DNV ST F101 load controlled'
+            for arc, gamma_c in [[arc_ob, 0.8], [arc_st, 1.0], [arc_sb, 1.0]]:
+                codechecks.DNVSTF101GammaC = gamma_c
+                static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
+                f101_res += [static.max()]
 
         # Rollers
         support_loads = []
@@ -309,48 +393,59 @@ def static_summary(outpath, datpaths: list[Path]):
                 ws.cell(irow, icol).value = ang
             irow += 1
 
-        ws.cell(14, icol).value = ltype.OD * 1000
-        ws.cell(15, icol).value = ltype.WallThickness * 1000
+        # Pipe data
+        istart = 13
+        ws.cell(istart + 1, icol).value = ltype.OD * 1000
+        ws.cell(istart + 2, icol).value = ltype.WallThickness * 1000
+        ws.cell(istart + 3, icol).value = ltype.CWC
+        ws.cell(istart + 4, icol).value = ltype.SNIF
         if ltype.CoatingThickness > 0.0:
-            ws.cell(16, icol).value = ltype.CoatingThickness * 1000
-            ws.cell(17, icol).value = ltype.CoatingMaterialDensity * 1000
+            ws.cell(istart + 5, icol).value = ltype.CoatingThickness * 1000
+            ws.cell(istart + 6, icol).value = ltype.CoatingMaterialDensity * 1000
         if ltype.LiningThickness > 0.0:
-            ws.cell(18, icol).value = ltype.LiningThickness * 1000
-            ws.cell(19, icol).value = ltype.LiningMaterialDensity * 1000
-        ws.cell(20, icol).value = wt_in_air * 1000
-        ws.cell(21, icol).value = wt_submerged * 1000
+            ws.cell(istart + 7, icol).value = ltype.LiningThickness * 1000
+            ws.cell(istart + 8, icol).value = ltype.LiningMaterialDensity * 1000
+        ws.cell(istart + 9, icol).value = wt_in_air * 1000
+        ws.cell(istart + 10, icol).value = wt_submerged * 1000
 
         # Static results
-        ws.cell(24, icol).value = bollard_pull
-        ws.cell(25, icol).value = top_tension
-        ws.cell(26, icol).value = layback
-        ws.cell(27, icol).value = scope_length
-        ws.cell(28, icol).value = pipe_gain
-        ws.cell(29, icol).value = tip_clearance
-        ws.cell(30, icol).value = draft
-        ws.cell(31, icol).value = seabed_clearance
-        ws.cell(32, icol).value = pipe_angles[0]
-        ws.cell(33, icol).value = pipe_angles[1]
+        istart = 25
+        ws.cell(istart + 1, icol).value = bollard_pull
+        ws.cell(istart + 2, icol).value = top_tension
+        ws.cell(istart + 3, icol).value = layback
+        ws.cell(istart + 4, icol).value = scope_length
+        ws.cell(istart + 5, icol).value = pipe_gain
+        ws.cell(istart + 6, icol).value = tip_clearance
+        ws.cell(istart + 7, icol).value = draft
+        ws.cell(istart + 8, icol).value = seabed_clearance
+        ws.cell(istart + 9, icol).value = pipe_angles[0]
+        ws.cell(istart + 10, icol).value = pipe_angles[1]
 
-        # Pipe loads
-        ws.cell(36, icol).value = res_ob[0]
-        ws.cell(37, icol).value = res_ob[1]
-        ws.cell(38, icol).value = res_ob[2]
-        ws.cell(39, icol).value = res_sag[0]
-        ws.cell(40, icol).value = res_sag[1] / 1000  # vm stress
+        # Pipe stress and strain
+        for irow in range(7):
+            val = stress_res[irow]
+            if irow in [3, 4, 5]:
+                val /= 1000  # Convert stresses to MPa
+            ws.cell(38 + irow, icol).value = val
 
-        irow = 43
+        # F101 code checks
+        for irow in range(8):
+            ws.cell(47 + irow, icol).value = f101_res[irow]
+
+        # Support loads
+        irow = 57
         for load in support_loads:
             ws.cell(irow, icol).value = load
             irow += 1
 
-        irow = 59
+        # Roller depths
+        irow = 73
         for depth in roller_depths:
             ws.cell(irow, icol).value = depth
             irow += 1
 
         # Set cell alignment
-        for irow in range(1, 80):
+        for irow in range(1, 100):
             ws.cell(irow, icol).alignment = Alignment(
                 horizontal='center', vertical='center')
 
@@ -459,6 +554,10 @@ def select_radius(vessel: Vessel, num_section: int,
         stress_strain = pmodel[linetype.E]
         clone = stress_strain.CreateClone(name=stress_strain.Name,
                                           model=vmodel)
+    # Check for non-linear bending stiffness
+    if isinstance(linetype.EIx, str):
+        bend_stiff = pmodel[linetype.EIx]
+        clone = bend_stiff.CreateClone(name=bend_stiff.Name, model=vmodel)
     clone = linetype.CreateClone(name=linetype.Name, model=vmodel)
     line = vmodel.CreateObject(ofx.ObjectType.Line, name='Line1')
 
@@ -695,6 +794,8 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     # Set roller heights and angles
     path_coords = calc_path_coords(model, straight, transition)
     rollers = get_roller_heights(model, path_coords, ang1, ang2)
+
+    # np.savetxt(PATH / 'path_coords.txt', path_coords, delimiter=',') xxx
 
     if not rollers:
         print('Stinger config not valid, roller heights outside limits')
@@ -1222,12 +1323,30 @@ def get_base_case(vessel: Vessel, stinger_radius: float,
     # Fetch pipe linetype from pipe dat file
     datpath = PATH / 'pipe.dat'
     pmodel = ofx.Model(datpath)
-    linetypes = [obj.Name for obj in pmodel.objects if obj.typeName == 'Line type']
+    linetypes = [obj.Name for obj in pmodel.objects if 
+                 obj.typeName == 'Line type']
     linetype = pmodel[linetypes[0]]
-    # Check for stress-strain curve
+    # Category Homogeneous pipe: Check for stress-strain curve
     if isinstance(linetype.E, str):
         stress_strain = pmodel[linetype.E]
-        clone = stress_strain.CreateClone(name=stress_strain.Name, model=model)
+        clone = stress_strain.CreateClone(
+            name=stress_strain.Name, model=model)
+    # Category General: Check for non-linear bending stiffness
+    if isinstance(linetype.EIx, str):
+        bend_stiff = pmodel[linetype.EIx]
+        clone = bend_stiff.CreateClone(name=bend_stiff.Name, model=model)
+    # Category General: Stress-strain table is specified in linetype tags
+    if 'stress-strain table' in linetype.tags:
+        try:
+            stress_strain = pmodel[linetype.tags['stress-strain table']]
+            clone = stress_strain.CreateClone(name=stress_strain.Name,
+                                              model=model)
+        except KeyError:
+            print(('Stress-strain table specified in linetype tags '
+                   'not found in model'))
+    else:
+        print('Linetype must contain tag "stress-strain table" ')
+
     clone = linetype.CreateClone(name=linetype.Name, model=model)
 
     # Remove stinger sections
@@ -1267,7 +1386,7 @@ def get_roller_heights(
         model['b6 stinger_2'].InitialRotation3 = ang2
 
     ltypes = [obj for obj in model.objects if obj.typeName == 'Line type']
-    pipe_od = ltypes[0].OD
+    pipe_od = ltypes[0].OD * 1000
 
     roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
     # roller_names = [x[3:] for x in all_names if x[:5] in ['b6 SR']] xxx
@@ -1347,16 +1466,19 @@ def get_roller_heights(
             roller_data.y = y_roller
         else:
             return []
-        
-        # Just for finding new configs xxx
-        # Increase roller ymax in dat file, only when finding new configs
-        if radius >= 370000:
-            if rname == 'BR5':
-                if roller_data.y > 1425:
-                    roller_data.y = 1425
-        if rname == 'BR6':
-            if roller_data.y > 1000:
-                roller_data.y = 1000
+
+        # Corrections for large stinger radii (need to fix this, see TODO)
+        # BR5 ymax in dat file is set to 1.25, but should be 1.0
+        vname = stinger_ref.Connection
+        if vname in ['v S1200', 'v S3500']:
+            r1, r2 = (5, 6) if vname == 'v S1200' else (6, 7)
+            if radius >= 370000:
+                if rname == f'BR{r1}':
+                    if roller_data.y > 1425:
+                        roller_data.y = 1425
+            if rname == f'BR{r2}':
+                if roller_data.y > 1000:
+                    roller_data.y = 1000
 
         rollers.append(roller_data)
 

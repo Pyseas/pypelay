@@ -137,7 +137,10 @@ def write_dxf_ga(datpath: Path) -> None:
     stinger_ref = model['b6 stinger_ref']
     # glob_x, glob_y = line.EndAX * 1000, line.EndAY * 1000
     ltype = model[line.LineType[1]]
-    pipe_od = ltype.OuterContactDiameter * 1000
+    pipe_od = ltype.OuterContactDiameter
+    if pipe_od == ofx.OrcinaDefaultReal():
+        pipe_od = ltype.OD
+    pipe_od *= 1000
     model.CalculateStatics()
     model.SaveSimulation(datpath.with_suffix('.sim'))
     ref_x = stinger_ref.StaticResult('X')

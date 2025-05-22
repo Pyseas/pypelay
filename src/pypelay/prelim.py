@@ -15,7 +15,46 @@ from .stinger import (get_base_case, StingerSetupArgs, stinger_setup,
 PATH = Path('.')
 
 __all__ = ['valid_configs_to_df', 'solve_configs', 'combine_configs',
-           'sort_configs', 'plot_configs']
+           'sort_configs', 'plot_configs', 'write_final_configs']
+
+
+def write_final_configs(vessel: Vessel, inpath: Path) -> None:
+
+    df = pd.read_excel(inpath)
+    df = df[df['prefer'] == 1]
+    df.reset_index(drop=True, inplace=True)
+    nconfig = len(df)
+
+    # random_configs = [4, 5, 38, 50, 62, 68, 70, 75, 75, 94, 104, 105, 118, 153, 165]
+    # df = df.iloc[random_configs]
+
+    df.drop(['prefer'], axis=1, inplace=True)
+
+    icfg = 0
+    roller_dicts = {}
+    for row in df.itertuples():
+        print(row.radius, row.num_section, f'{icfg + 1}/{nconfig}')
+        icfg += 1
+        # Create base case model
+        model = get_base_case(vessel, row.radius, row.num_section)
+        path_coords = calc_path_coords(model, row.straight, row.transition)
+        rollers = get_roller_heights(model, path_coords, row.ang1, row.ang2)
+        roller_dict = {}
+        for roller in rollers:
+            roller_dict[f'{roller.name} y'] = roller.y
+            roller_dict[f'{roller.name} r3'] = roller.r3
+            roller_dict[f'{roller.name} post_angle'] = roller.post_angle
+            roller_dict[f'{roller.name} arc'] = roller.arc
+            roller_dict[f'{roller.name} y_offset'] = roller.y_offset
+        roller_dicts[row.lc] = roller_dict
+
+    df2 = pd.DataFrame(roller_dicts).transpose()
+
+    df = df.join(df2, on='lc', how='left')
+
+    df.to_excel(PATH / 'configs' / f'{vessel.name}_configs.xlsx', index=False)
+
+    return
 
 
 def plot_configs(num_section: int, radii: list[float]) -> None:
@@ -106,7 +145,6 @@ def solve_configs(vessel: Vessel, radii: list[float]) -> None:
     df = pd.read_excel(PATH / 'configs' / 'valid_configs.xlsx')
 
     for radius in radii:
-    # for radius in np.linspace(145, 150, 2) * 1000:
         for num_section in [1, 2, 3]:
             df2 = df[(df['radius'] == radius) &
                      (df['num_section'] == num_section)]
@@ -172,10 +210,14 @@ def valid_configs_to_df(vessel: Vessel, radii: list[float]) -> None:
         (and num_section) and saves them to valid_configs.xlsx
         stinger_config =
             radius, num_section, straight, transition, ang1, ang2'''
+
+    nconfig = len(radii) * 3
+
+    icfg = 0
     configs = []
     for radius in radii:
         for num_section in [1, 2, 3]:
-            print(radius, num_section)
+            print(radius, num_section, f'{icfg + 1}/{nconfig}')
             # Create base case model
             model = get_base_case(vessel, radius, num_section)
 
@@ -192,8 +234,7 @@ def valid_configs_to_df(vessel: Vessel, radii: list[float]) -> None:
                     section_angles.append([ang1, ang2])
 
             sims = []
-            for straight in np.linspace(0, 10000, 6):
-            # for straight in [0, 2000]:
+            for straight in np.linspace(0, 16000, 9):
                 maxtrans = tensioner_x - straight
                 ntrans = round(maxtrans / 2000)
                 dtrans = maxtrans / ntrans
@@ -207,6 +248,8 @@ def valid_configs_to_df(vessel: Vessel, radii: list[float]) -> None:
             for res in result:
                 for row in res:
                     configs.append([radius, num_section] + row)
+
+            icfg += 1
 
     cols = ['radius', 'num_section', 'straight', 'transition', 'ang1', 'ang2']
 

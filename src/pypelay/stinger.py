@@ -70,10 +70,6 @@ class StingerSetupArgs:
     inpath: Path
     outpath: Path
     config: dict
-    # straight: float xxx
-    # transition: float
-    # ang1: float
-    # ang2: float
     water_depth: float
     tip_clearance: float
     delete_dat: bool = False
@@ -497,8 +493,7 @@ def set_radius(vessel: Vessel, num_section: int, radius: float,
     xlpath = files('pypelay') / f'{vessel.name}_configs.xlsx'
     df = pd.read_excel(xlpath)
 
-    df = df[(df['num_section'] == num_section) & 
-            (df['prefer'] == 1)]
+    df = df[(df['num_section'] == num_section)]
 
     df.sort_values(['radius'], inplace=True)
     df.reset_index(drop=True, inplace=True)
@@ -761,9 +756,56 @@ def get_options() -> StingerSetupOptions:
     return opts
 
 
+def solve_model(datpath: Path, model: ofx.Model,
+                line: ofx.OrcaFlexObject) -> bool:
+
+    solved = False
+    for _ in range(5):
+        try:
+            model.CalculateStatics()
+            model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
+            solved = True
+            break
+        except:
+            newdamp = line.FullStaticsMinDamping + 2.0
+            line.FullStaticsMinDamping = newdamp
+            model.SaveData(datpath)
+            print(f'Loadcase {datpath.name} increasing line damping to {newdamp}')
+
+    if not solved:
+        line.FullStaticsMinDamping = 7.0
+        endbx = line.EndBX
+        anchor_move = 5.0
+        line.EndBX = endbx - anchor_move
+        for _ in range(5):
+            try:
+                model.CalculateStatics()
+                model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
+                solved = True
+                break
+            except:
+                anchor_move += 5.0
+                line.EndBX = endbx - anchor_move
+                model.SaveData(datpath)
+                print(f'Loadcase {datpath.name} anchor move {anchor_move}')
+
+    return solved
+
+
+def write_error_file(sim: StingerSetupArgs, err_msg: str) -> None:
+    '''Write error message to file.
+
+    Args:
+        sim (StingerSetupArgs): Stinger setup arguments
+        err_msg (str): Error message
+    '''
+    err_msg = f'Loadcase {sim.outpath.name}: {err_msg}'
+    with open(sim.outpath.with_suffix('.txt'), 'w') as f:
+        f.write(err_msg)
+
+
 def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     '''
-     - Calculate pipe path and roller heights
      - Set roller heights
      - Create pipe
      - Adjust bollard pull to get target tip clearance
@@ -791,35 +833,41 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     if num_section > 1:
         model['b6 stinger_2'].InitialRotation3 = ang2
 
-    # Set roller heights and angles
-    path_coords = calc_path_coords(model, straight, transition)
-    rollers = get_roller_heights(model, path_coords, ang1, ang2)
+    # Calculate pipe end coordinates
+    endax = float(stinger_ref.tags['endax']) / 1000
+    bop = float(stinger_ref.tags['bop']) / 1000
+    oltype = [obj for obj in model.objects if
+                obj.typeName == 'Line type'][0]  # First linetype in model
+    pipe_od = oltype.OuterContactDiameter
+    if pipe_od == ofx.OrcinaDefaultReal():
+        pipe_od = oltype.OD
+    enday = bop + (pipe_od / 2) / math.cos(math.radians(30.0))
 
-    # np.savetxt(PATH / 'path_coords.txt', path_coords, delimiter=',') xxx
+    all_names = [obj.Name for obj in model.objects]
+    roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
 
-    if not rollers:
-        print('Stinger config not valid, roller heights outside limits')
-        return StingerSetupResults(sim.outpath)
-    
-    for roller in rollers:
-        oroller = model[f'cn {roller.name}']
-        oroller.InitialY = roller.y / 1000
-        oroller.DOFInitialValue[5] = roller.r3
-        # Manual roller height adjustments
-        if roller.name in sim.config:
-            manual_roller_y = sim.config[roller.name]
-            if np.isnan(manual_roller_y):
-                continue
-            oroller.InitialY = manual_roller_y / 1000
+    for rname in roller_names:
+        oroller = model[f'cn {rname}']
+        y = sim.config[f'{rname} y']
+        r3 = sim.config[f'{rname} r3']
+        oroller.InitialY = y / 1000
+        oroller.DOFInitialValue[5] = r3
 
     # Create line
-    roller = rollers[-1]
+    rname = roller_names[-1]
+    last_y_offset = sim.config[f'{rname} y_offset']
+    last_arc = sim.config[f'{rname} arc']
+    last_r3 = sim.config[f'{rname} r3']
+    last_post_angle = sim.config[f'{rname} post_angle']
+
+    # roller = rollers[-1]
     # Connect line to roller at y_offset then change connection to stinger_ref
     line = model.CreateObject(ofx.ObjectType.Line, 'Line1')
     line.LayAzimuth = 0.0
     line.NumberOfSections = 3
     # Line overbend (first section) extends 10m past last roller
-    ob_length = roller.arc / 1000 + 10.0
+    ob_extra = 10.0
+    ob_length = last_arc / 1000 + ob_extra
     line.Length[0] = 20.0  # First section is for tensioner
     line.TargetSegmentLength[0] = 20.0
     line.Length[1] = ob_length - 20.0
@@ -828,16 +876,16 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     line.FullStaticsMinDamping = 5.0
     line.FullStaticsMaxDamping = 20.0
 
-    buoy_name = f'b6 {roller.name}'
+    buoy_name = f'b6 {rname}'
     line.EndAConnection = buoy_name
     line.EndAX = 0.0
-    line.EndAY = roller.y_offset / 1000
+    line.EndAY = last_y_offset / 1000
     line.EndAZ = 0.0
     line.EndAConnection = 'Fixed'
     end_a = np.array([line.EndAX, line.EndAZ])
     line.EndAConnection = 'b6 stinger_ref'
 
-    top_angle = math.radians(roller.post_angle + roller.r3 - 90)
+    top_angle = math.radians(last_post_angle + last_r3 - 90)
     dh = end_a[1] + sim.water_depth
     susp_len, dx = catenary_length(dh, top_angle)
     length_on_seabed = 200
@@ -845,10 +893,11 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     line.EndBX = end_a[0] - dx - length_on_seabed
     line.EndBHeightAboveSeabed = 0.0
 
-    line.Length[2] = susp_len + length_on_seabed
+    line.Length[2] = susp_len + length_on_seabed - ob_extra
+
     line.EndAConnection = 'b6 stinger_ref'
-    line.EndAX = path_coords[-1, 0] / 1000
-    line.EndAY = path_coords[-1, 1] / 1000
+    line.EndAX = endax
+    line.EndAY = enday
     # Set top end orientation and stiffness
     line.IncludeTorsion = 'Yes'
     line.EndAxBendingStiffness = ofx.OrcinaInfinity()
@@ -860,38 +909,17 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     # Set rollers supported line
     model['b6 firing_line'].NumberOfSupportedLines = 1
     model['b6 firing_line'].SupportedLine[0] = 'Line1'
-    for roller in rollers:
-        buoy = model[f'b6 {roller.name}']
+    for rname in roller_names:
+        buoy = model[f'b6 {rname}']
         buoy.NumberOfSupportedLines = 1
         buoy.SupportedLine[0] = 'Line1'
-        buoy.tags['post_angle'] = f'{roller.post_angle:.1f}'
-        buoy.tags['r3'] = f'{roller.r3:.3f}'
-        buoy.tags['arc'] = f'{roller.arc:.1f}'
+        for var_name, dp in [['post_angle', 1], ['r3', 3], ['arc', 1]]:
+            var = sim.config[f'{rname} {var_name}']
+            buoy.tags[var_name] = f'{var:.{dp}f}'
 
-    # For first solve set rollers to soft
-    # set_roller_stiffness(model, 3000)
-
-    # Move anchor for large stinger radii
-    # set_roller_pivots(model, option='fixed')
-    if radius > 240000:
-        line.EndBX += -12
-
-    # Solve statics, use calculated line shapes
-    solved = False
-    for _ in range(5):
-        try:
-            model.CalculateStatics()
-            model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
-            solved = True
-            break
-        except:
-            newdamp = line.FullStaticsMinDamping + 2.0
-            line.FullStaticsMinDamping = newdamp
-            model.SaveData(sim.outpath)
-            print(f'Loadcase {sim.outpath.name} increasing damping to {newdamp}')
-
+    solved = solve_model(sim.outpath, model, line)
     if not solved:
-        print(f'Loadcase {sim.outpath.name} failed to solve')
+        write_error_file(sim, 'Failed to solve')
         return StingerSetupResults(sim.outpath)
 
     # Write stinger config details to b6 stinger_ref tags,
@@ -908,12 +936,16 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
 
     # Adjust bollard pull to get target tip clearance
     # (updates model, unsolved state)
-    solved = set_bollard_pull(model, 'tip_clearance', sim.tip_clearance, tol=0.01)
+    solved = set_bollard_pull(sim.outpath, model, 'tip_clearance',
+                              sim.tip_clearance, tol=0.01)
     if not solved:
-        print('Failed to converge (tip clearance)')
+        write_error_file(sim, 'Failed to solve (bollard pull)')
         return StingerSetupResults(sim.outpath)
 
-    update_segmentation(model, opts)
+    solved = update_segmentation(sim.outpath, model, opts)
+    if not solved:
+        write_error_file(sim, 'Failed to solve (segmentation)')
+        return StingerSetupResults(sim.outpath)
 
     if opts.tensioner_mode != 'Brake':
         add_deadband_winch(model, opts)
@@ -924,20 +956,25 @@ def stinger_setup(sim: StingerSetupArgs) -> StingerSetupResults:
     model.SaveData(sim.outpath)
 
     # Create dat file suitable for running dynamics (vessel)
-    prep_for_dyn(sim.outpath)
+    solved = prep_for_dyn(sim.outpath)
+    if not solved:
+        write_error_file(sim, 'Failed to solve (prep_for_dyn)')
+        return StingerSetupResults(sim.outpath)
 
     res = get_setup_results(model, sim.outpath)
 
-    # If running all 18000 configs need to delete dat files
+    # If running 1000's configs need to delete dat files
     if sim.delete_dat:
         sim.outpath.unlink()
+        dynpath = sim.outpath.parent / f'{sim.outpath.stem}_dyn.dat'
+        dynpath.unlink()
 
     print(f'Radius {radius / 1000:.0f}m : {res}')
 
     return res
 
 
-def prep_for_dyn(datpath: Path) -> None:
+def prep_for_dyn(datpath: Path) -> bool:
     '''
     Prepare model for dynamic analysis:
      - Set roller orientations, delete constraints
@@ -945,13 +982,17 @@ def prep_for_dyn(datpath: Path) -> None:
     '''
     model = ofx.Model(datpath)
 
-    set_roller_pivots(model, option='dyn')
+    solved = set_roller_pivots(model, option='dyn')
+    if not solved:
+        return False
 
     ovessel = [obj for obj in model.objects if obj.typeName == 'Vessel'][0]
     ovessel.IncludedInStatics = 'None'
 
     outpath = datpath.parent / f'{datpath.stem}_dyn.dat'
     model.SaveData(outpath)
+
+    return True
 
 
 def set_roller_stiffness(model: ofx.Model, stiffness: float) -> None:
@@ -962,7 +1003,7 @@ def set_roller_stiffness(model: ofx.Model, stiffness: float) -> None:
         stype.NormalStiffness = stiffness
 
 
-def set_roller_pivots(model: ofx.Model, option: str = 'dyn') -> None:
+def set_roller_pivots(model: ofx.Model, option: str = 'dyn') -> bool:
     '''
     Options:
     1. fixed, release: Fix all roller pivots to theoretical angles
@@ -994,7 +1035,10 @@ def set_roller_pivots(model: ofx.Model, option: str = 'dyn') -> None:
         case 'dyn':
             # Determine if roller angle needs to be set to r3 based on
             # roller load
-            model.CalculateStatics()
+            try:
+                model.CalculateStatics()
+            except:
+                return False
             adjust_angle = {}
             for rname in roller_names:
                 adjust_angle[rname] = False
@@ -1016,6 +1060,8 @@ def set_roller_pivots(model: ofx.Model, option: str = 'dyn') -> None:
                     r3 = float(oroller.tags['r3'])
                     oroller.InitialRotation3 = r3
                 model.DestroyObject(ocn)
+
+    return True
 
  
 def add_deadband_winch(model: ofx.Model, opts: StingerSetupOptions) -> None:
@@ -1074,7 +1120,9 @@ def add_deadband_winch(model: ofx.Model, opts: StingerSetupOptions) -> None:
     winch.DriveDampingPayOut = 0.1
 
 
-def update_segmentation(model: ofx.Model, opts: StingerSetupOptions) -> None:
+def update_segmentation(datpath: Path,
+                        model: ofx.Model,
+                        opts: StingerSetupOptions) -> bool:
 
     if model.state == 0:
         # Reset state = 0, InStaticState = 2
@@ -1134,20 +1182,9 @@ def update_segmentation(model: ofx.Model, opts: StingerSetupOptions) -> None:
 
     line.StaticsStep1 = 'Catenary'
 
-    solved = False
-    for _ in range(5):
-        try:
-            model.CalculateStatics()
-            model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
-            solved = True
-            break
-        except:
-            newdamp = line.FullStaticsMinDamping + 2.0
-            line.FullStaticsMinDamping = newdamp
-            print(f'Increasing line damping to {newdamp}')
+    solved = solve_model(datpath, model, line)
 
-    if not solved:
-        print('Couldnt solve after updating segmentation')
+    return solved
 
 
 def adjust_top_tension(inpath: Path, outpath: Path, tension: float) -> None:
@@ -1163,14 +1200,16 @@ def adjust_top_tension(inpath: Path, outpath: Path, tension: float) -> None:
 
     model.SaveData(outpath)
 
-    solved = set_bollard_pull(model, 'top_tension', tension, tol=1.0)
-
+    solved = set_bollard_pull(outpath, model, 'top_tension', tension, tol=1.0)
     if not solved:
-        print('Failed to converge (top tension)')
+        print(f'{inpath.name}: Failed to solve (top tension)')
         return
 
     opts = get_options()
-    update_segmentation(model, opts)
+    solved = update_segmentation(outpath, model, opts)
+    if not solved:
+        print(f'{inpath.name}: Failed to solve (segmentation)')
+        return
 
     model.SaveData(outpath)
 
@@ -1181,7 +1220,8 @@ def adjust_top_tension(inpath: Path, outpath: Path, tension: float) -> None:
     print(res)
 
 
-def set_bollard_pull(model: ofx.Model, 
+def set_bollard_pull(datpath: Path,
+                     model: ofx.Model, 
                      target_var: str, target_val: float,
                      tol: float) -> bool:
     # Iterates vessel bollard pull to achieve target stinger tip clearance
@@ -1212,18 +1252,7 @@ def set_bollard_pull(model: ofx.Model,
     for _ in range(10):
         vessel.GlobalAppliedForceX[0] = bp1
         # Solve statics, use calculated line shapes
-        solved = False
-        for _ in range(5):
-            try:
-                model.CalculateStatics()
-                model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
-                solved = True
-                break
-            except:
-                newdamp = line.FullStaticsMinDamping + 2.0
-                line.FullStaticsMinDamping = newdamp
-                print(f'Increasing line damping to {newdamp}')
-
+        solved = solve_model(datpath, model, line)
         if not solved:
             return False
 
@@ -1327,25 +1356,29 @@ def get_base_case(vessel: Vessel, stinger_radius: float,
                  obj.typeName == 'Line type']
     linetype = pmodel[linetypes[0]]
     # Category Homogeneous pipe: Check for stress-strain curve
-    if isinstance(linetype.E, str):
-        stress_strain = pmodel[linetype.E]
-        clone = stress_strain.CreateClone(
-            name=stress_strain.Name, model=model)
-    # Category General: Check for non-linear bending stiffness
-    if isinstance(linetype.EIx, str):
-        bend_stiff = pmodel[linetype.EIx]
-        clone = bend_stiff.CreateClone(name=bend_stiff.Name, model=model)
-    # Category General: Stress-strain table is specified in linetype tags
-    if 'stress-strain table' in linetype.tags:
-        try:
-            stress_strain = pmodel[linetype.tags['stress-strain table']]
-            clone = stress_strain.CreateClone(name=stress_strain.Name,
-                                              model=model)
-        except KeyError:
-            print(('Stress-strain table specified in linetype tags '
-                   'not found in model'))
+    if linetype.Category == 'Homogeneous pipe':
+        if isinstance(linetype.E, str):
+            stress_strain = pmodel[linetype.E]
+            clone = stress_strain.CreateClone(
+                name=stress_strain.Name, model=model)
+    elif linetype.Category == 'General':
+        # Check for non-linear bending stiffness
+        if isinstance(linetype.EIx, str):
+            bend_stiff = pmodel[linetype.EIx]
+            clone = bend_stiff.CreateClone(name=bend_stiff.Name, model=model)
+        # Stress-strain table is specified in linetype tags
+        if 'stress-strain table' in linetype.tags:
+            try:
+                stress_strain = pmodel[linetype.tags['stress-strain table']]
+                clone = stress_strain.CreateClone(name=stress_strain.Name,
+                                                model=model)
+            except KeyError:
+                print(('Stress-strain table specified in linetype tags '
+                    'not found in model'))
+        else:
+            print('WARNING: Linetype must contain tag "stress-strain table" ')
     else:
-        print('Linetype must contain tag "stress-strain table" ')
+        print('WARNING: Linetype must be of type "General" or "Homogeneous pipe"')
 
     clone = linetype.CreateClone(name=linetype.Name, model=model)
 
@@ -1372,8 +1405,9 @@ def get_base_case(vessel: Vessel, stinger_radius: float,
 def get_roller_heights(
     model: ofx.Model, path_coords: np.ndarray,
     ang1: float, ang2: float) -> list[Roller]:
-    ''' Calculates roller heights and angles for input stinger angles and pipe path.
-        If pipe path is outside roller range (ymin, ymax) then returns None.'''
+    ''' Calculates roller heights and angles for input stinger angles
+        and pipe path. If pipe path is outside roller range (ymin, ymax)
+        then returns empty list.'''
 
     all_names = [obj.Name for obj in model.objects]
 
@@ -1466,19 +1500,6 @@ def get_roller_heights(
             roller_data.y = y_roller
         else:
             return []
-
-        # Corrections for large stinger radii (need to fix this, see TODO)
-        # BR5 ymax in dat file is set to 1.25, but should be 1.0
-        vname = stinger_ref.Connection
-        if vname in ['v S1200', 'v S3500']:
-            r1, r2 = (5, 6) if vname == 'v S1200' else (6, 7)
-            if radius >= 370000:
-                if rname == f'BR{r1}':
-                    if roller_data.y > 1425:
-                        roller_data.y = 1425
-            if rname == f'BR{r2}':
-                if roller_data.y > 1000:
-                    roller_data.y = 1000
 
         rollers.append(roller_data)
 

@@ -5,7 +5,7 @@ from pathlib import Path
 from multiprocessing import Pool
 import pandas as pd
 import OrcFxAPI as ofx
-from pypelay.stinger import get_options
+from pypelay.stinger import get_options, get_linetype, get_pipe_results
 
 PATH = Path('.')
 
@@ -245,7 +245,11 @@ def run_orca(sim: Sim) -> None:
 
     # PIPELINE RESULTS --------------------------------------------------
     line = model['Line1']
-    ltype = model[line.LineType[0]]
+    oltype = model[line.LineType[1]]
+    ltype = get_linetype(oltype)
+    if not ltype:
+        print('Linetype problem')
+        return
 
     line_length = line.CumulativeLength[-1]
 
@@ -319,51 +323,11 @@ def run_orca(sim: Sim) -> None:
         results += [static, dyn]
 
     # PIPE STRESS, STRAIN and CODE CHECKS -----------------------------
-    # Functional / Environmental
-    # a -> 1.2 / 0.7
-    # b -> 1.1 / 1.3
-    codechecks = model['Code checks']
-    ltype.DNVSTF101AlphaPm = 1.0
-
-    tip_len = sim.stinger_tip_len / 2
-    arc_ob = ofx.arSpecifiedArclengths(20.0, last_roller_arc - tip_len)
-    arc_st = ofx.arSpecifiedArclengths(last_roller_arc - tip_len,
-                                       last_roller_arc + tip_len)
-    arc_sb = ofx.arSpecifiedArclengths(last_roller_arc + tip_len,
-                                       line_length)
-
-    # Stress and strain
-    var = 'Max pipelay von Mises strain'
-    for arc in [arc_ob, arc_st, arc_sb]:
-        static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
-        dyn = line.RangeGraph(var, 1, None, arc).Max
-        results += [static.max(), dyn.max()]
-
-    var = 'Max von Mises stress'
-    for arc in [arc_ob, arc_st, arc_sb]:
-        static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
-        dyn = line.RangeGraph(var, 1, None, arc).Max
-        results += [static.max(), dyn.max()]
-
-    var = 'Max bending strain'
-    static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
-    dyn = line.RangeGraph(var, 1, None, arc_ob).Max
-    results += [static.max(), dyn.max()]
-
-    for gamma_f, gamma_e in [[1.2, 0.7], [1.1, 1.3]]:
-        codechecks.DNVSTF101GammaF = gamma_f
-        codechecks.DNVSTF101GammaE = gamma_e
-        var = 'DNV ST F101 disp. controlled'
-        codechecks.DNVSTF101GammaC = 0.8
-        static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
-        dyn = line.RangeGraph(var, 1, None, arc_ob).Max
-        results += [static.max(), dyn.max()]
-        var = 'DNV ST F101 load controlled'
-        for arc, gamma_c in [[arc_ob, 0.8], [arc_st, 1.0], [arc_sb, 1.0]]:
-            codechecks.DNVSTF101GammaC = gamma_c
-            static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
-            dyn = line.RangeGraph(var, 1, None, arc).Max
-            results += [static.max(), dyn.max()]
+    opts = get_options()
+    pipe_res = get_pipe_results(model, opts)
+    nrow = pipe_res.shape[0]
+    for irow in range(nrow):
+        results += [pipe_res[irow, 0], pipe_res[irow, 1]]
 
     outpath = PATH / 'sims' / f'LC_{sim.lc:05d}.txt'
     with open(outpath, 'w') as f:

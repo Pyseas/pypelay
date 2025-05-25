@@ -126,6 +126,7 @@ class LineType:
     LiningMaterialDensity: float
     CWC: str
     SNIF: float
+    ram_osgd: RambergOsgood | None
     WallThickness: float = field(init=False)
 
     def __post_init__(self):
@@ -211,6 +212,186 @@ def get_ramberg_osgood(model: ofx.Model, table_name: str) -> RambergOsgood | Non
     return RambergOsgood(E, ref_stress, K, n, stress, strain)
 
 
+def get_linetype(model: ofx.Model) -> LineType | None:
+
+    line = model['Line1']
+    oltype = model[line.LineType[1]]
+
+    if oltype.Category == 'General':
+        # Concrete coated
+        cwc_tags = ['cwc thickness (m)', 'cwc density (t/m^3)',
+                    'lining thickness (m)', 'lining density (t/m^3)',
+                    'snif', 'stress-strain table']
+        if not all(k in oltype.tags for k in cwc_tags):
+            outstr = 'Pipe linetype is missing one or more tags (for CWC): '
+            outstr += ', '.join([x for x in cwc_tags])
+            print(outstr)
+            return
+
+        mass = oltype.MassPerUnitLength
+        pipe_od = oltype.StressOD
+        pipe_id = oltype.StressID
+        if pipe_id == ofx.OrcinaDefaultReal():
+            pipe_id = oltype.ID
+        coating_thk = float(oltype.tags['cwc thickness (m)'])
+        coating_dens = float(oltype.tags['cwc density (t/m^3)'])
+        lining_thk = float(oltype.tags['lining thickness (m)'])
+        lining_dens = float(oltype.tags['lining density (t/m^3)'])
+        cwc = 'Yes'
+        snif = float(oltype.tags['snif'])
+        stress_strain_table = oltype.tags['stress-strain table']
+        ram_osgd = get_ramberg_osgood(model, stress_strain_table)
+        if not ram_osgd:
+            return
+
+    elif oltype.Category == 'Homogeneous pipe':
+        mass = oltype.MassPerUnitLength
+        pipe_od = oltype.OD
+        pipe_id = oltype.ID
+        coating_thk = oltype.CoatingThickness
+        coating_dens = oltype.CoatingMaterialDensity
+        lining_thk = oltype.LiningThickness
+        lining_dens = oltype.LiningMaterialDensity
+        cwc = 'No'
+        snif = 1.0
+        ram_osgd = None
+    else:
+        print('Linetype category must be "General" or "Homogeneous pipe"')
+        return
+
+    return LineType(oltype.Name, mass, pipe_od, pipe_id,
+                    coating_thk, coating_dens, lining_thk, lining_dens,
+                    cwc, snif, ram_osgd)
+
+
+def get_pipe_results(model: ofx.Model,
+                     opts: StingerSetupOptions) -> np.ndarray:
+    # Returns 2D array: 15x2
+    #      Rows: 7x stress/strain results + 8x code check results
+    #   Columns: Static, max
+    pipe_res = np.zeros((15, 2))
+
+    ltype = get_linetype(model)
+    if not ltype:
+        return pipe_res
+    
+    dynamic_sim = False
+    if model.state == ofx.ModelState.SimulationStopped:
+        dynamic_sim = True
+
+    line = model['Line1']
+    oltype = model[line.LineType[1]]
+    oltype.DNVSTF101AlphaPm = 1.0
+    youngs_mod = oltype.DNVSTF101E
+
+    all_names = [obj.Name for obj in model.objects]
+    roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
+    last_roller = model['b6 ' + roller_names[-1]]
+    last_roller_arc = float(last_roller.tags['arc']) / 1000
+
+    line = model['Line1']
+    line_length = line.CumulativeLength[-1]
+
+    tip_len = opts.tip_len
+    arc_ob = ofx.arSpecifiedArclengths(20.0, last_roller_arc - tip_len)
+    arc_st = ofx.arSpecifiedArclengths(
+        last_roller_arc - tip_len, last_roller_arc + tip_len)
+    arc_sb = ofx.arSpecifiedArclengths(
+        last_roller_arc + tip_len, line_length)
+
+    # Stress and strain
+    ires = 0
+    var = 'Max pipelay von Mises strain'
+    for arc in [arc_ob, arc_st, arc_sb]:
+        static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
+        pipe_res[ires, 0] = static.max()
+        if dynamic_sim:
+            dyn = line.RangeGraph(var, 1, None, arc).Max
+            pipe_res[ires, 1] = dyn.max()
+        ires += 1
+
+    # Modified vm strain only for overbend (if CWC)
+    if ltype.CWC == 'Yes':
+        bend_strain = line.RangeGraph(
+            'Max bending strain', ofx.pnStaticState, None, arc_ob).Mean
+        tensile_strain = line.RangeGraph(
+            'Direct tensile strain', ofx.pnStaticState, None, arc_ob).Mean
+        worst_zz_strain = bend_strain * ltype.SNIF + tensile_strain
+        hoop_stress = line.RangeGraph(
+            'Worst hoop stress', ofx.pnStaticState, None, arc_ob).Mean
+        hoop_strain = hoop_stress / youngs_mod
+        mod_vm_strain = np.sqrt(worst_zz_strain**2 + hoop_strain**2 - 
+                                worst_zz_strain * hoop_strain)
+        pipe_res[0, 0] = mod_vm_strain.max()
+        if dynamic_sim:
+            bend_strain = line.RangeGraph(
+                'Max bending strain', 1, None, arc_ob).Max
+            tensile_strain = line.RangeGraph(
+                'Direct tensile strain', 1, None, arc_ob).Max
+            worst_zz_strain = bend_strain * ltype.SNIF + tensile_strain
+            hoop_stress = line.RangeGraph(
+                'Worst hoop stress', 1, None, arc_ob).Max
+            hoop_strain = hoop_stress / youngs_mod
+            mod_vm_strain = np.sqrt(worst_zz_strain**2 + hoop_strain**2 - 
+                                    worst_zz_strain * hoop_strain)
+            pipe_res[0, 1] = mod_vm_strain.max()
+
+    # For CWC, stresses are calculated from strains using Ramberg-Osgood curve
+    var = 'Max von Mises stress'
+    for i, arc in enumerate([arc_ob, arc_st, arc_sb]):
+        if ltype.CWC == 'No':
+            static = line.RangeGraph(
+                var, ofx.pnStaticState, None, arc).Mean.max()
+            if dynamic_sim:
+                dyn = line.RangeGraph(var, 1, None, arc).Max.max()
+        else:
+            ro = ltype.ram_osgd
+            if ro:
+                static = np.interp(pipe_res[i, 0], ro.strain, ro.stress)
+                dyn = np.interp(pipe_res[i, 1], ro.strain, ro.stress)
+            else:
+                static, dyn = 0.0, 0.0
+        pipe_res[ires, 0] = static
+        pipe_res[ires, 1] = dyn
+        ires += 1
+
+    var = 'Max bending strain'
+    static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
+    pipe_res[ires, 0] = static.max() * ltype.SNIF
+    if dynamic_sim:
+        dyn = line.RangeGraph(var, 1, None, arc_ob).Max
+        pipe_res[ires, 1] = dyn.max() * ltype.SNIF
+    ires += 1
+
+    # Code checks
+    # Functional / Environmental
+    # a -> 1.2 / 0.7
+    # b -> 1.1 / 1.3
+    codechecks = model['Code checks']
+    for gamma_f, gamma_e in [[1.2, 0.7], [1.1, 1.3]]:
+        codechecks.DNVSTF101GammaF = gamma_f
+        codechecks.DNVSTF101GammaE = gamma_e
+        var = 'DNV ST F101 disp. controlled'
+        codechecks.DNVSTF101GammaC = 0.8
+        static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
+        pipe_res[ires, 0] = static.max() * ltype.SNIF
+        if dynamic_sim:
+            dyn = line.RangeGraph(var, 1, None, arc_ob).Max
+            pipe_res[ires, 1] = dyn.max() * ltype.SNIF
+        ires += 1
+        var = 'DNV ST F101 load controlled'
+        for arc, gamma_c in [[arc_ob, 0.8], [arc_st, 1.0], [arc_sb, 1.0]]:
+            codechecks.DNVSTF101GammaC = gamma_c
+            static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
+            pipe_res[ires, 0] = static.max()
+            if dynamic_sim:
+                dyn = line.RangeGraph(var, 1, None, arc).Max
+                pipe_res[ires, 1] = dyn.max()
+            ires += 1
+
+    return pipe_res
+
+
 def static_summary(outpath, datpaths: list[Path]) -> None:
     """Create spreadsheet with static results for one or multiple dat files.
 
@@ -221,8 +402,6 @@ def static_summary(outpath, datpaths: list[Path]) -> None:
     xlpath = Path(str(files('pypelay') / 'static_summary.xlsx'))
     wb = load_workbook(xlpath)
     ws = wb['Sheet1']
-    # style_str = NamedStyle(name='style_str')
-    # style_str.alignment = Alignment(vertical='center', horizontal='center')
 
     opts = get_options()
     tip_len = opts.tip_len
@@ -250,61 +429,18 @@ def static_summary(outpath, datpaths: list[Path]) -> None:
         bollard_pull = ovessel.GlobalAppliedForceX[0]
 
         # Pipe data
-        oltype = [obj for obj in model.objects if
-                  obj.typeName == 'Line type'][0]  # First linetype in model
-
-        if oltype.Category == 'General':
-            # Concrete coated
-            cwc_tags = ['cwc thickness (m)', 'cwc density (t/m^3)',
-                        'lining thickness (m)', 'lining density (t/m^3)',
-                        'snif', 'stress-strain table']
-            if not all(k in oltype.tags for k in cwc_tags):
-                outstr = 'Pipe linetype is missing one or more tags (for CWC): '
-                outstr += ', '.join([x for x in cwc_tags])
-                print(outstr)
-                return
-
-            mass = oltype.MassPerUnitLength
-            pipe_od = oltype.StressOD
-            pipe_id = oltype.StressID
-            if pipe_id == ofx.OrcinaDefaultReal():
-                pipe_id = oltype.ID
-            coating_thk = float(oltype.tags['cwc thickness (m)'])
-            coating_dens = float(oltype.tags['cwc density (t/m^3)'])
-            lining_thk = float(oltype.tags['lining thickness (m)'])
-            lining_dens = float(oltype.tags['lining density (t/m^3)'])
-            cwc = 'Yes'
-            snif = float(oltype.tags['snif'])
-            stress_strain_table = oltype.tags['stress-strain table']
-            ram_osgd = get_ramberg_osgood(model, stress_strain_table)
-            if not ram_osgd:
-                return
-
-        elif oltype.Category == 'Homogeneous pipe':
-            mass = oltype.MassPerUnitLength
-            pipe_od = oltype.OD
-            pipe_id = oltype.ID
-            coating_thk = oltype.CoatingThickness
-            coating_dens = oltype.CoatingMaterialDensity
-            lining_thk = oltype.LiningThickness
-            lining_dens = oltype.LiningMaterialDensity
-            cwc = 'No'
-            snif = 1.0
-        else:
-            print('Linetype category must be "General" or "Homogeneous pipe"')
+        line = model['Line1']
+        oltype = model[line.LineType[1]]
+        ltype = get_linetype(model)
+        if not ltype:
+            print('Linetype problem')
             return
-
-        ltype = LineType(
-            oltype.Name, mass, pipe_od, pipe_id, coating_thk, coating_dens,
-            lining_thk, lining_dens, cwc, snif)
-
         wt_in_air, wt_submerged = ltype.weights(0.0)
 
         roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
         last_roller = model['b6 ' + roller_names[-1]]
         last_roller_arc = float(last_roller.tags['arc']) / 1000
 
-        line = model['Line1']
         top_tension = float(line.StaticResult('Effective tension', ofx.oeEndA))
 
         # Layback, scope, gain
@@ -335,71 +471,7 @@ def static_summary(outpath, datpaths: list[Path]) -> None:
         seabed_clearance = depth - draft
 
         # PIPE STRESS, STRAIN and CODE CHECKS -----------------------------
-        codechecks = model['Code checks']
-        oltype.DNVSTF101AlphaPm = 1.0
-        youngs_mod = oltype.DNVSTF101E
-
-        line_length = line.CumulativeLength[-1]
-
-        arc_ob = ofx.arSpecifiedArclengths(20.0, last_roller_arc - tip_len)
-        arc_st = ofx.arSpecifiedArclengths(last_roller_arc - tip_len,
-                                        last_roller_arc + tip_len)
-        arc_sb = ofx.arSpecifiedArclengths(last_roller_arc + tip_len,
-                                        line_length)
-
-        # Stress and strain
-        stress_res = []
-        var = 'Max pipelay von Mises strain'
-        for arc in [arc_ob, arc_st, arc_sb]:
-            static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
-            stress_res += [static.max()]
-
-        # Modified vm strain only for overbend (if CWC)
-        if ltype.CWC == 'Yes':
-            bend_strain = line.RangeGraph(
-                'Max bending strain', ofx.pnStaticState, None, arc_ob).Mean
-            tensile_strain = line.RangeGraph(
-                'Direct tensile strain', ofx.pnStaticState, None, arc_ob).Mean
-            worst_zz_strain = bend_strain * snif + tensile_strain
-            hoop_stress = line.RangeGraph(
-                'Worst hoop stress', ofx.pnStaticState, None, arc_ob).Mean
-            hoop_strain = hoop_stress / youngs_mod
-            mod_vm_strain = np.sqrt(worst_zz_strain**2 + hoop_strain**2 - 
-                                    worst_zz_strain * hoop_strain)
-            stress_res[0] = mod_vm_strain.max()
-
-        # For CWC, stresses are calculated from strains using Ramberg-Osgood
-        var = 'Max von Mises stress'
-        for i, arc in enumerate([arc_ob, arc_st, arc_sb]):
-            if ltype.CWC == 'No':
-                static = line.RangeGraph(
-                    var, ofx.pnStaticState, None, arc).Mean.max()
-            else:
-                static = np.interp(
-                    stress_res[i], ram_osgd.strain, ram_osgd.stress)
-            stress_res += [static]
- 
-        var = 'Max bending strain'
-        static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
-        stress_res += [static.max() * snif]
-
-        # Code checks
-        # Functional / Environmental
-        # a -> 1.2 / 0.7
-        # b -> 1.1 / 1.3
-        f101_res = []
-        for gamma_f, gamma_e in [[1.2, 0.7], [1.1, 1.3]]:
-            codechecks.DNVSTF101GammaF = gamma_f
-            codechecks.DNVSTF101GammaE = gamma_e
-            var = 'DNV ST F101 disp. controlled'
-            codechecks.DNVSTF101GammaC = 0.8
-            static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
-            f101_res += [static.max()]
-            var = 'DNV ST F101 load controlled'
-            for arc, gamma_c in [[arc_ob, 0.8], [arc_st, 1.0], [arc_sb, 1.0]]:
-                codechecks.DNVSTF101GammaC = gamma_c
-                static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
-                f101_res += [static.max()]
+        pipe_res = get_pipe_results(model, opts)
 
         # Rollers
         support_loads = []
@@ -429,6 +501,7 @@ def static_summary(outpath, datpaths: list[Path]) -> None:
             pipe_angles.append(line.StaticResult(
                 'Declination', ofx.oeArcLength(roller_arc)) - 90.0)
 
+        # Write results to spreadsheet
         ws.cell(2, icol).value = dpath.stem
         ws.cell(3, icol).value = ' '.join(vname.split()[1:])
         ws.cell(4, icol).value = model.environment.WaterDepth
@@ -471,14 +544,14 @@ def static_summary(outpath, datpaths: list[Path]) -> None:
 
         # Pipe stress and strain
         for irow in range(7):
-            val = stress_res[irow]
+            val = pipe_res[irow, 0]
             if irow in [3, 4, 5]:
                 val /= 1000  # Convert stresses to MPa
             ws.cell(38 + irow, icol).value = val
 
         # F101 code checks
         for irow in range(8):
-            ws.cell(47 + irow, icol).value = f101_res[irow]
+            ws.cell(47 + irow, icol).value = pipe_res[irow + 7, 0]
 
         # Support loads
         irow = 57

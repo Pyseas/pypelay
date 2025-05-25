@@ -2,16 +2,19 @@
 New vessel stinger setup functions are in prelim.py
 
 ``` py
-    vessel = pypelay.Vessel('S1200', draft=7400)
-    # radii = list(np.linspace(80, 250, 35) * 1000)
-    # radii += list(np.linspace(260, 350, 10) * 1000)
-    # radii += list(np.linspace(370, 550, 10) * 1000)
+    vessel = pypelay.Vessel('S1200', vessel_type='vt S1200',
+                            draft_name='Draft_7.4m')
+    radii = list(np.linspace(80, 250, 35) * 1000)
+    radii += list(np.linspace(260, 400, 15) * 1000)
+    radii += list(np.linspace(420, 540, 7) * 1000)
     pypelay.valid_configs_to_df(vessel, radii)
-    # Move valid_configs spreadsheet into new *configs* folder
+    # Move valid_configs spreadsheet into new *configs* folder, add "lc" column
     pypelay.solve_configs(vessel, radii)
     pypelay.combine_configs()
     pypelay.sort_configs()
-    pypelay.plot_configs(num_section=3, radii=radii)
+    pypelay.plot_configs(num_section=2, radii=radii)
+    inpath = PATH / 'configs' / 'top10_configs.xlsx'
+    pypelay.write_final_configs(vessel, inpath)
 ```
 
 ## valid_configs_to_df
@@ -46,3 +49,6 @@ For each *num_section* (1-2-3) and *radius*, sort by overbend UC, then extract t
 Plot top 5 (i.e. lowest overbend UC) configs for each radius.
 Manually select best config for each radius so that tip angle vs radius is monotonically decreasing and input this data to *preferred.xlsx*.
 Preferred line will appear on scatter plot.
+
+## write_final_configs
+Creates the final config spreadsheet, which includes all roller details (y, r3, y_offset, post_angle, arc)

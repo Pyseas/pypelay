@@ -29,6 +29,17 @@ class Roller:
     arc: float = 0.0  # Arc length along pipe path (in mm)
     y_offset: float = 0.0  # Offset from V to pipe CL (in mm)
 
+
+@dataclass
+class RambergOsgood:
+    E: float
+    ref_stress: float
+    K: float
+    n: float
+    stress: np.ndarray
+    strain: np.ndarray
+
+
 @dataclass
 class Vessel:
     """Vessel class.
@@ -173,7 +184,34 @@ def list_raos(vessel_name: str | None = None):
     print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
 
 
-def static_summary(outpath, datpaths: list[Path]):
+def get_ramberg_osgood(model: ofx.Model, table_name: str) -> RambergOsgood | None:
+
+    all_names = [obj.name for obj in model.objects]
+
+    if table_name not in all_names:
+        msg = f'Stress strain table {table_name} does not exist in model'
+        print(msg)
+        return
+
+    ram_osgd = model[table_name]
+
+    if ram_osgd.CurveType != 'Ramberg-Osgood curve':
+        msg = f'Stress strain table must be of type Ramberg-Osgood curve'
+        print(msg)
+        return
+
+    E = ram_osgd.E
+    ref_stress = ram_osgd.RefStress
+    K = ram_osgd.K
+    n = ram_osgd.n
+
+    stress = np.linspace(0, ref_stress * 1.2, 200)
+    strain = (stress / E + K * (stress / ref_stress)**n) * 100
+
+    return RambergOsgood(E, ref_stress, K, n, stress, strain)
+
+
+def static_summary(outpath, datpaths: list[Path]) -> None:
     """Create spreadsheet with static results for one or multiple dat files.
 
     Args:
@@ -221,7 +259,7 @@ def static_summary(outpath, datpaths: list[Path]):
                         'lining thickness (m)', 'lining density (t/m^3)',
                         'snif', 'stress-strain table']
             if not all(k in oltype.tags for k in cwc_tags):
-                outstr = 'Pipe linetype is missing one or more tags: '
+                outstr = 'Pipe linetype is missing one or more tags (for CWC): '
                 outstr += ', '.join([x for x in cwc_tags])
                 print(outstr)
                 return
@@ -236,6 +274,10 @@ def static_summary(outpath, datpaths: list[Path]):
             lining_dens = float(oltype.tags['lining density (t/m^3)'])
             cwc = 'Yes'
             snif = float(oltype.tags['snif'])
+            stress_strain_table = oltype.tags['stress-strain table']
+            ram_osgd = get_ramberg_osgood(model, stress_strain_table)
+            if not ram_osgd:
+                return
         elif oltype.Category == 'Homogeneous pipe':
             mass = oltype.MassPerUnitLength
             pipe_od = oltype.OD
@@ -277,11 +319,11 @@ def static_summary(outpath, datpaths: list[Path]):
         clear = 0
         for isup in [1, 2]:
             objx = ofx.oeSupport(isup, 'Line1')
-            clear += last_roller.StaticResult(
-                'Support contact clearance', objx)
+            var = 'Support contact clearance'
+            clear += last_roller.StaticResult(var, objx)
         tip_clearance = float(clear) / 2
 
-        # Static results
+        # Depths
         last_section = model[f'b6 stinger_{num_section}']
         vertx = min(last_section.VertexX)
         objx = ofx.oeBuoy(vertx, 0, 0)
@@ -306,30 +348,37 @@ def static_summary(outpath, datpaths: list[Path]):
         stress_res = []
         var = 'Max pipelay von Mises strain'
         for arc in [arc_ob, arc_st, arc_sb]:
-            if snif > 1.0:
-                bend_strain = line.RangeGraph(
-                    'Max bending strain', ofx.pnStaticState, None, arc).Mean
-                tensile_strain = line.RangeGraph(
-                    'Direct tensile strain', ofx.pnStaticState, None, arc).Mean
-                worst_zz_strain = bend_strain * snif + tensile_strain
-                hoop_stress = line.RangeGraph(
-                    'Worst hoop stress', ofx.pnStaticState, None, arc).Mean
-                hoop_strain = hoop_stress / youngs_mod
-                mod_vm_strain = np.sqrt(worst_zz_strain**2 + hoop_strain**2 - 
-                                        worst_zz_strain * hoop_strain)
-                static = mod_vm_strain
-            else:
-                static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
-            # stress_res += [static.max()]
-
-        var = 'Max von Mises stress'
-        for arc in [arc_ob, arc_st, arc_sb]:
             static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
             stress_res += [static.max()]
 
+        # Modified vm strain only for overbend (if CWC)
+        if ltype.CWC == 'Yes':
+            bend_strain = line.RangeGraph(
+                'Max bending strain', ofx.pnStaticState, None, arc_ob).Mean
+            tensile_strain = line.RangeGraph(
+                'Direct tensile strain', ofx.pnStaticState, None, arc_ob).Mean
+            worst_zz_strain = bend_strain * snif + tensile_strain
+            hoop_stress = line.RangeGraph(
+                'Worst hoop stress', ofx.pnStaticState, None, arc_ob).Mean
+            hoop_strain = hoop_stress / youngs_mod
+            mod_vm_strain = np.sqrt(worst_zz_strain**2 + hoop_strain**2 - 
+                                    worst_zz_strain * hoop_strain)
+            stress_res[0] = mod_vm_strain.max()
+
+        # For CWC, stresses are calculated from strains using Ramberg-Osgood
+        var = 'Max von Mises stress'
+        for i, arc in enumerate([arc_ob, arc_st, arc_sb]):
+            if ltype.CWC == 'No':
+                static = line.RangeGraph(
+                    var, ofx.pnStaticState, None, arc).Mean.max()
+            else:
+                static = np.interp(
+                    stress_res[i], ram_osgd.strain, ram_osgd.stress)
+            stress_res += [static]
+ 
         var = 'Max bending strain'
         static = line.RangeGraph(var, ofx.pnStaticState, None, arc_ob).Mean
-        stress_res += [static.max()]
+        stress_res += [static.max() * snif]
 
         # Code checks
         # Functional / Environmental
@@ -623,8 +672,7 @@ def select_radius(vessel: Vessel, num_section: int,
     xlpath = files('pypelay') / (f'{vessel.name}_configs.xlsx')
     df = pd.read_excel(xlpath)
 
-    df = df[(df['num_section'] == num_section) & 
-            (df['prefer'] == 1)]
+    df = df[(df['num_section'] == num_section)]
 
     df.sort_values(['radius'], inplace=True)
     df.reset_index(drop=True, inplace=True)

@@ -216,7 +216,7 @@ Input data required by the [wave_search][pypelay.wave_search] function:
 ### Sheet: *waves*
 This sheet is automatically created when the user runs the
 [wave_search][pypelay.wave_search] function.
- 
+
 ## Dynamic analysis
 Create the list of simulations using [make_sims][pypelay.make_sims]:
 
@@ -242,3 +242,18 @@ Post-process the results using [postprocess][pypelay.postprocess]:
 ```python
 pypelay.postprocess(PATH / 'dyn_summary.xlsx')
 ```
+
+## Concrete weight coating (CWC)
+If the pipe has a CWC then the linetype category must be *General*, and some additional data must be specified using the linetype Tags.
+The following tags must be present:
+
+| Tag name        | Description               |
+| ----------------| ------------------------- |
+| cwc thickness (m)    | CWC thickness in m   |
+| cwc density (t/m^3)  | CWC density in t/m^3 |
+| lining thickness (m)    | Lining thickness in m   |
+| lining density (t/m^3)  | Lining density in t/m^3 |
+| snif  | Strain concentration factor |
+| stress-strain table  | Name of stress-strain relationship |
+
+The stress-strain table is a variable data source of type *Stress-strain relationship*. It must be a *Ramberg-Osgood curve* not a *Stress-strain table*.

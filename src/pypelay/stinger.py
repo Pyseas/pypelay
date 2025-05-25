@@ -263,6 +263,7 @@ def static_summary(outpath, datpaths: list[Path]) -> None:
                 outstr += ', '.join([x for x in cwc_tags])
                 print(outstr)
                 return
+
             mass = oltype.MassPerUnitLength
             pipe_od = oltype.StressOD
             pipe_id = oltype.StressID
@@ -278,6 +279,7 @@ def static_summary(outpath, datpaths: list[Path]) -> None:
             ram_osgd = get_ramberg_osgood(model, stress_strain_table)
             if not ram_osgd:
                 return
+
         elif oltype.Category == 'Homogeneous pipe':
             mass = oltype.MassPerUnitLength
             pipe_od = oltype.OD
@@ -295,6 +297,7 @@ def static_summary(outpath, datpaths: list[Path]) -> None:
         ltype = LineType(
             oltype.Name, mass, pipe_od, pipe_id, coating_thk, coating_dens,
             lining_thk, lining_dens, cwc, snif)
+
         wt_in_air, wt_submerged = ltype.weights(0.0)
 
         roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]

@@ -17,6 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 
+## [0.3.0] - 2025-05-26
+
+### Added
+- Concrete weight coating
+
+### Changed
+- All new stinger profiles up to 540m (fixed bug in calc_path_coords - pipe_od * 1000)
+- Added roller data to configs spreadsheet, stinger_setup no longer needs to calculate roller heights
+
+### Removed
+
+
 ## [0.2.4] - 2025-05-10
 
 ### Added

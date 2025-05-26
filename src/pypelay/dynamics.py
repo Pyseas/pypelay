@@ -192,6 +192,10 @@ def run_orca(sim: Sim) -> None:
 
     model = ofx.Model(base_path)
 
+    ltype = get_linetype(model)
+    if not ltype:
+        return
+
     all_names = [obj.Name for obj in model.objects]
 
     ovessel = [obj for obj in model.objects if obj.typeName == 'Vessel'][0]
@@ -245,12 +249,6 @@ def run_orca(sim: Sim) -> None:
 
     # PIPELINE RESULTS --------------------------------------------------
     line = model['Line1']
-    oltype = model[line.LineType[1]]
-    ltype = get_linetype(oltype)
-    if not ltype:
-        print('Linetype problem')
-        return
-
     line_length = line.CumulativeLength[-1]
 
     roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]

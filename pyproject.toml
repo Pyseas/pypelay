@@ -1,6 +1,6 @@
 [project]
 name = "pypelay"
-version = "0.2.4"
+version = "0.3.0"
 description = "Automated S-lay analysis using Orcaflex"
 readme = "README.md"
 requires-python = ">=3.11"

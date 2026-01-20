@@ -17,6 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 
+## [0.3.1] - 2025-10-13
+
+### Added
+
+### Changed
+- Fixed bug in stinger.py, dynamic vm stress was undefined for "no cwc" case
+
+### Removed
+
+
+
 ## [0.3.0] - 2025-05-26
 
 ### Added

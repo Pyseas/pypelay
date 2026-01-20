@@ -342,6 +342,7 @@ def get_pipe_results(model: ofx.Model,
         if ltype.CWC == 'No':
             static = line.RangeGraph(
                 var, ofx.pnStaticState, None, arc).Mean.max()
+            dyn = 0.0
             if dynamic_sim:
                 dyn = line.RangeGraph(var, 1, None, arc).Max.max()
         else:

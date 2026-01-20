@@ -150,6 +150,8 @@ def solve_configs(vessel: Vessel, radii: list[float]) -> None:
                      (df['num_section'] == num_section)]
             # rerun = list(range(6585, 6600))
             # df2 = df[(df['lc'].isin(rerun))]
+            if df2.empty:
+                continue
 
             model = get_base_case(vessel, radius, num_section)
 

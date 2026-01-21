@@ -18,39 +18,11 @@ __all__ = ['valid_configs_to_df', 'solve_configs', 'combine_configs',
            'sort_configs', 'plot_configs', 'write_final_configs']
 
 
-def write_final_configs(vessel: Vessel, inpath: Path) -> None:
+def write_final_configs(vessel: Vessel) -> None:
 
-    df = pd.read_excel(inpath)
+    df = pd.read_excel(PATH / 'configs' / 'top10_configs.xlsx')
     df = df[df['prefer'] == 1]
     df.reset_index(drop=True, inplace=True)
-    nconfig = len(df)
-
-    # random_configs = [4, 5, 38, 50, 62, 68, 70, 75, 75, 94, 104, 105, 118, 153, 165]
-    # df = df.iloc[random_configs]
-
-    df.drop(['prefer'], axis=1, inplace=True)
-
-    icfg = 0
-    roller_dicts = {}
-    for row in df.itertuples():
-        print(row.radius, row.num_section, f'{icfg + 1}/{nconfig}')
-        icfg += 1
-        # Create base case model
-        model = get_base_case(vessel, row.radius, row.num_section)
-        path_coords = calc_path_coords(model, row.straight, row.transition)
-        rollers = get_roller_heights(model, path_coords, row.ang1, row.ang2)
-        roller_dict = {}
-        for roller in rollers:
-            roller_dict[f'{roller.name} y'] = roller.y
-            roller_dict[f'{roller.name} r3'] = roller.r3
-            roller_dict[f'{roller.name} post_angle'] = roller.post_angle
-            roller_dict[f'{roller.name} arc'] = roller.arc
-            roller_dict[f'{roller.name} y_offset'] = roller.y_offset
-        roller_dicts[row.lc] = roller_dict
-
-    df2 = pd.DataFrame(roller_dicts).transpose()
-
-    df = df.join(df2, on='lc', how='left')
 
     df.to_excel(PATH / 'configs' / f'{vessel.name}_configs.xlsx', index=False)
 
@@ -94,6 +66,7 @@ def plot_configs(num_section: int, radii: list[float]) -> None:
 
     ax.set_xlabel('Stinger radius (mm)')
     ax.set_ylabel('Stinger tip angle (deg)')
+    # ax.set_xlim([radii[0], radii[-1]])
 
     ax.plot(to_plot[:, 0], to_plot[:, 1])
     plt.suptitle(f'{num_section} stinger sections')
@@ -202,9 +175,27 @@ def get_valid_configs(sim) -> list[list[float]]:
     for ang1, ang2 in section_angles:
         rollers = get_roller_heights(model, path_coords, ang1, ang2)
         if rollers:
-            results.append([straight, transition, ang1, ang2])
+            res = [straight, transition, ang1, ang2]
+            for roller in rollers: 
+                res += [roller.y, roller.r3, roller.post_angle,
+                        roller.arc, roller.y_offset]
+            results.append(res)
 
     return results
+
+
+def get_roller_cols(model: ofx.Model) -> list[str]:
+    ''' Returns list of roller column names for DataFrame'''
+    all_names = [obj.Name for obj in model.objects]
+    roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
+
+    roller_cols = []
+    for rname in roller_names:
+        roller_cols += [f'{rname} y', f'{rname} r3',
+                        f'{rname} post_angle', f'{rname} arc',
+                        f'{rname} y_offset']
+        
+    return roller_cols
 
 
 def valid_configs_to_df(vessel: Vessel, radii: list[float]) -> None:
@@ -214,6 +205,10 @@ def valid_configs_to_df(vessel: Vessel, radii: list[float]) -> None:
             radius, num_section, straight, transition, ang1, ang2'''
 
     nconfig = len(radii) * 3
+
+    model = get_base_case(vessel, radii[0], num_section=3)
+    roller_cols = get_roller_cols(model)
+    nrcol = len(roller_cols)
 
     icfg = 0
     configs = []
@@ -249,15 +244,21 @@ def valid_configs_to_df(vessel: Vessel, radii: list[float]) -> None:
 
             for res in result:
                 for row in res:
+                    # All results must be same length, so pad missing roller results
+                    # with None
+                    if len(row) < 4 + nrcol:
+                        row += [None] * (4 + nrcol - len(row))
                     configs.append([radius, num_section] + row)
 
             icfg += 1
 
     cols = ['radius', 'num_section', 'straight', 'transition', 'ang1', 'ang2']
+    cols += roller_cols
 
     configs = pd.DataFrame(np.asarray(configs), columns=cols)
+    configs.insert(0, 'lc', range(1, len(configs) + 1))
 
-    configs.to_excel(PATH / 'valid_configs.xlsx', index=False)
+    configs.to_excel(PATH / 'configs' / 'valid_configs.xlsx', index=False)
 
 
 def main():

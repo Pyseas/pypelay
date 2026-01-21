@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [0.3.2] - 2026-01-21
+
+### Added
+
+### Changed
+- New stinger configurations (S1200 and S3500), SR6 ymax reduced from 6169mm to 5029mm
+- New S3500 wireframe, previous wireframe was copy of S1200. New one has length 156.4m and breadth 44.8m
+
+### Removed
 
 ## [0.3.1] - 2025-10-13
 

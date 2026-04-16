@@ -146,10 +146,15 @@ def get_roller_loads(roller_names: list[str],
     for rname in roller_names:
         oroller = model[f'b6 {rname}']
         var = 'Support reaction force'
-        res0 = (oroller.StaticResult(var, ofx.oeSupport(1)) +
-                oroller.StaticResult(var, ofx.oeSupport(2)))
-        res1 = (oroller.TimeHistory(var, 1, ofx.oeSupport(1)) +
-                oroller.TimeHistory(var, 1, ofx.oeSupport(2)))
+        if oroller.NumberOfSupports == 2:
+            res0 = (oroller.StaticResult(var, ofx.oeSupport(1)) +
+                    oroller.StaticResult(var, ofx.oeSupport(2)))
+            res1 = (oroller.TimeHistory(var, 1, ofx.oeSupport(1)) +
+                    oroller.TimeHistory(var, 1, ofx.oeSupport(2)))
+        else:
+            res0 = oroller.StaticResult(var, ofx.oeSupport(1))
+            res1 = oroller.TimeHistory(var, 1, ofx.oeSupport(1))
+
         static.append(res0)
         dyn.append(res1.max())
 
@@ -292,12 +297,17 @@ def run_orca(sim: Sim) -> None:
 
     # Stinger tip clearance
     var = 'Support contact clearance'
-    clr1 = last_roller.StaticResult(var, ofx.oeSupport(1))
-    clr2 = last_roller.StaticResult(var, ofx.oeSupport(2))
-    static = (clr1 + clr2) / 2
-    clr1 = last_roller.TimeHistory(var, 1, ofx.oeSupport(1))
-    clr2 = last_roller.TimeHistory(var, 1, ofx.oeSupport(2))
-    dyn = (clr1 + clr2) / 2
+    if last_roller.NumberOfSupports == 2:
+        clr1 = last_roller.StaticResult(var, ofx.oeSupport(1))
+        clr2 = last_roller.StaticResult(var, ofx.oeSupport(2))
+        static = (clr1 + clr2) / 2
+        clr1 = last_roller.TimeHistory(var, 1, ofx.oeSupport(1))
+        clr2 = last_roller.TimeHistory(var, 1, ofx.oeSupport(2))
+        dyn = (clr1 + clr2) / 2
+    else:
+        static = last_roller.StaticResult(var, ofx.oeSupport(1))
+        dyn = last_roller.TimeHistory(var, 1, ofx.oeSupport(1))
+
     results += [static, dyn.max(), dyn.min()]
 
     # Stinger seabed clearance

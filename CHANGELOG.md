@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [0.3.3] - 2026-04-16
+
+### Added
+
+### Changed
+- Updated dynamics to work with S2000 input dat file. Main change is that some S2000 rollers have 1 support instead of 2.
+
+### Removed
+
 ## [0.3.2] - 2026-01-21
 
 ### Added

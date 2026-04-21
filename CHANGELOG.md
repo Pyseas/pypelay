@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [0.3.4] - 2026-04-21
+
+### Added
+
+### Changed
+- Bugfix: SetLinesetLinesToUserSpecifiedStartingShape, changed so that first letter is lower case. Code now works for both cases.
+
+### Removed
+
+
 ## [0.3.3] - 2026-04-16
 
 ### Added

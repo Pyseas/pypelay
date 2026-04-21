@@ -888,7 +888,10 @@ def solve_model(datpath: Path, model: ofx.Model,
     for _ in range(5):
         try:
             model.CalculateStatics()
-            model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
+            try:
+                model.UseCalculatedPositions(setLinesToUserSpecifiedStartingShape=True)
+            except:
+                model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
             solved = True
             break
         except:
@@ -905,7 +908,10 @@ def solve_model(datpath: Path, model: ofx.Model,
         for _ in range(5):
             try:
                 model.CalculateStatics()
-                model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
+                try:
+                    model.UseCalculatedPositions(setLinesToUserSpecifiedStartingShape=True)
+                except:
+                    model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
                 solved = True
                 break
             except:
@@ -1401,7 +1407,10 @@ def set_bollard_pull(datpath: Path,
         bp0, bp1 = bp1, bp2
         res0 = res1
 
-    model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
+        try:
+            model.UseCalculatedPositions(setLinesToUserSpecifiedStartingShape=True)
+        except:
+            model.UseCalculatedPositions(SetLinesToUserSpecifiedStartingShape=True)
 
     return True
 

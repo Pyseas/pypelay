@@ -3,6 +3,7 @@ from dataclasses import dataclass, fields
 import OrcFxAPI as ofx
 from pathlib import Path
 from multiprocessing import Pool
+import numpy as np
 import pandas as pd
 import OrcFxAPI as ofx
 from pypelay.stinger import get_options, get_linetype, get_pipe_results
@@ -52,7 +53,7 @@ def aggfuncs(df: pd.DataFrame) -> dict:
     return aggs
 
 
-def get_header() -> list[str]:
+def get_header(roller_names: list[str]) -> list[str]:
     # Results column names
     header = ['lc']
     for var in ['layback', 'scope', 'pipe_gain',
@@ -62,7 +63,9 @@ def get_header() -> list[str]:
 
     header += ['seabed_clearance static', 'seabed_clearance min']
 
-    for var in ['barge_roller_load', 'stinger_roller_load',
+    # Pipe results
+    for var in ['eff_tension_ob', 'eff_tension_tip', 'eff_tension_sag',
+                'bend_moment_ob', 'bend_moment_tip', 'bend_moment_sag', 'bend_moment_weld',
                 'vm_strain_ob', 'vm_strain_tip', 'vm_strain_sag',
                 'vm_stress_ob', 'vm_stress_tip', 'vm_stress_sag',
                 'bend_strain_ob',
@@ -70,6 +73,14 @@ def get_header() -> list[str]:
                 'f101a_tip', 'f101a_sag',
                 'f101b_overbend_dcc', 'f101b_overbend_lcc',
                 'f101b_tip', 'f101b_sag']:
+        for res in ['static', 'max']:
+            header.append(f'{var} {res}')
+
+    # Roller loads
+    vars = ['barge_roller_load', 'stinger_roller_load']
+    for rname in roller_names:
+        vars.append(f'{rname}_load')
+    for var in vars:
         for res in ['static', 'max']:
             header.append(f'{var} {res}')
 
@@ -138,12 +149,15 @@ def make_sims(base_path: Path) -> None:
     sims.to_excel(outpath, index=False)
 
 
-def get_roller_loads(roller_names: list[str],
-                     model: ofx.Model) -> tuple[float, float]:
+def get_roller_loads(model: ofx.Model, roller_names: list[str]
+                     ) -> np.ndarray:
 
-    static = []
-    dyn = []
-    for rname in roller_names:
+    roller_loads = np.zeros((len(roller_names), 2))
+
+    barge_loads = []
+    stinger_loads = []
+
+    for i, rname in enumerate(roller_names):
         oroller = model[f'b6 {rname}']
         var = 'Support reaction force'
         if oroller.NumberOfSupports == 2:
@@ -155,10 +169,24 @@ def get_roller_loads(roller_names: list[str],
             res0 = oroller.StaticResult(var, ofx.oeSupport(1))
             res1 = oroller.TimeHistory(var, 1, ofx.oeSupport(1))
 
-        static.append(res0)
-        dyn.append(res1.max())
+        if rname[:2] == 'BR':
+            barge_loads.append([res0, res1.max()])
+        else:
+            stinger_loads.append([res0, res1.max()])
 
-    return max(static), max(dyn)
+    barge_loads = np.array(barge_loads)
+    stinger_loads = np.array(stinger_loads)
+
+    # First 2 rows are max across each roller type (barge and stinger)
+    roller_loads = np.zeros((2, 2))
+    roller_loads[0, 0] = barge_loads[:, 0].max()
+    roller_loads[0, 1] = barge_loads[:, 1].max()
+    roller_loads[1, 0] = stinger_loads[:, 0].max()
+    roller_loads[1, 1] = stinger_loads[:, 1].max()
+
+    roller_loads = np.vstack((roller_loads, barge_loads, stinger_loads))
+
+    return roller_loads
 
 
 def make_dat(tp: list[float], dirn: list[float]) -> None:
@@ -323,19 +351,24 @@ def run_orca(sim: Sim) -> None:
     d_clearance = depth - d_draft
     results += [s_clearance, d_clearance.min()]
 
-    # Roller loads
-    for roller_type in 'BR', 'SR':
-        roller_names = [x[3:] for x in all_names
-                        if x[:5] == f'b6 {roller_type}']
-        static, dyn = get_roller_loads(roller_names, model)
-        results += [static, dyn]
-
     # PIPE STRESS, STRAIN and CODE CHECKS -----------------------------
     opts = get_options()
     pipe_res = get_pipe_results(model, opts)
     nrow = pipe_res.shape[0]
     for irow in range(nrow):
         results += [pipe_res[irow, 0], pipe_res[irow, 1]]
+
+    # Roller loads
+    roller_res = get_roller_loads(model, roller_names)
+    nrow = roller_res.shape[0]
+    for irow in range(nrow):
+        results += [roller_res[irow, 0], roller_res[irow, 1]]
+    
+    # for roller_type in 'BR', 'SR':
+    #     roller_names = [x[3:] for x in all_names
+    #                     if x[:5] == f'b6 {roller_type}']
+    #     static, dyn = get_roller_loads(roller_names, model)
+    #     results += [static, dyn]
 
     outpath = PATH / 'sims' / f'LC_{sim.lc:05d}.txt'
     with open(outpath, 'w') as f:
@@ -344,7 +377,7 @@ def run_orca(sim: Sim) -> None:
     # model.SaveSimulation('{0}\\sims\\LC_{1:05d}.sim'.format(folder, lc))
 
 
-def combine_results() -> None:
+def combine_results(roller_names: list[str]) -> None:
 
     txtpaths = (PATH / 'sims').glob('*.txt')
     res = []
@@ -353,7 +386,7 @@ def combine_results() -> None:
             for line in f:
                 res.append([float(x) for x in line.split()])
 
-    header = get_header()
+    header = get_header(roller_names)
     df = pd.DataFrame(res, columns=header)
 
     sims = pd.read_excel(PATH / 'sims.xlsx')
@@ -400,7 +433,13 @@ def run_sims(ncpu: int, rerun: list[int] | None = None):
     with Pool(ncpu) as p:
         p.map(run_orca, sims, chunksize=1)
 
-    combine_results()
+    # Get roller names from first sim dat file
+    base_path = PATH / sims[0].base_filename
+    model = ofx.Model(base_path)
+    all_names = [obj.Name for obj in model.objects]
+    roller_names = [x[3:] for x in all_names if x[:5] in ['b6 BR', 'b6 SR']]
+
+    combine_results(roller_names)
 
 
 def result_summary(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
@@ -461,25 +500,31 @@ def postprocess(outpath: Path) -> None:
             'stinger_roller_load']
     res3 = result_summary(res1, cols)
 
+    # Forces and moments
+    cols = ['bend_moment_ob', 'bend_moment_tip', 'bend_moment_sag', 'bend_moment_weld',
+            'eff_tension_ob', 'eff_tension_tip', 'eff_tension_sag']
+    res4 = result_summary(res1, cols)
+
     # Stress and strain
     cols = ['vm_strain_ob', 'vm_strain_tip', 'vm_strain_sag',
             'vm_stress_ob', 'vm_stress_tip', 'vm_stress_sag', 'bend_strain_ob']
-    res4 = result_summary(res1, cols)
+    res5 = result_summary(res1, cols)
 
     # F101
     cols = []
     for lc in ['a', 'b']:
         for loc in ['overbend_dcc', 'overbend_lcc', 'tip', 'sag']:
             cols.append(f'f101{lc}_{loc}')
-    res5 = result_summary(res1, cols)
+    res6 = result_summary(res1, cols)
 
     with pd.ExcelWriter(outpath) as writer:
         res0.to_excel(writer, sheet_name='Seeds avg.', index=False)
         res1.to_excel(writer, sheet_name='Group by dirn', index=False)
         res2.to_excel(writer, sheet_name='Layback, clearance')
         res3.to_excel(writer, sheet_name='Tensions, roller loads')
-        res4.to_excel(writer, sheet_name='Stress and strain')
-        res5.to_excel(writer, sheet_name='F101')
+        res4.to_excel(writer, sheet_name='Forces and moments')
+        res5.to_excel(writer, sheet_name='Stress and strain')
+        res6.to_excel(writer, sheet_name='F101')
 
 def main():
     pass

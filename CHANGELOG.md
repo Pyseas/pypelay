@@ -16,6 +16,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [0.3.5] - 2026-04-28
+
+### Added
+- Dynamic results for all rollers
+- Effective tension and bend moment results, static_summary and dynamic
+- Bend moment results for weld station
+- weld_repair (location) tag added to "b6 firing_line"
+
+### Changed
+- Pipe now starts at station #1, 123m forward of transom. Previously was 65m.
+- Added 58m to all roller arcs in S1200 and S3500 config spreadsheets
+- static_summary bollard pull, changed from GlobalAppliedForceX to Connection force, bc AppliedForce only correct for 3 DOF vessel
+
+### Removed
+
+
 ## [0.3.4] - 2026-04-21
 
 ### Added

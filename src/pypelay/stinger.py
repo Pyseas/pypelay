@@ -266,10 +266,10 @@ def get_linetype(model: ofx.Model) -> LineType | None:
 
 def get_pipe_results(model: ofx.Model,
                      opts: StingerSetupOptions) -> np.ndarray:
-    # Returns 2D array: 15x2
-    #      Rows: 7x stress/strain results + 8x code check results
+    # Returns 2D array: 22x2
+    #      Rows: 7x force/moment results, 7x stress/strain results + 8x code check results
     #   Columns: Static, max
-    pipe_res = np.zeros((15, 2))
+    pipe_res = np.zeros((22, 2))
 
     ltype = get_linetype(model)
     if not ltype:
@@ -292,26 +292,37 @@ def get_pipe_results(model: ofx.Model,
     line = model['Line1']
     line_length = line.CumulativeLength[-1]
 
+    # Arc lengths: overbend, stinger tip, sag bend, weld repair
     tip_len = opts.tip_len
-    arc_ob = ofx.arSpecifiedArclengths(20.0, last_roller_arc - tip_len)
+    arc_ob = ofx.arSpecifiedArclengths(20.0, last_roller_arc - tip_len/2)
     arc_st = ofx.arSpecifiedArclengths(
-        last_roller_arc - tip_len, last_roller_arc + tip_len)
+        last_roller_arc - tip_len/2, last_roller_arc + tip_len/2)
     arc_sb = ofx.arSpecifiedArclengths(
-        last_roller_arc + tip_len, line_length)
+        last_roller_arc + tip_len/2, line_length)
+    firing_line = model['b6 firing_line']
+    weld_tag = firing_line.tags['weld_repair'].split('\n')
+    weld_from = float(weld_tag[0].split(':')[1].strip())
+    weld_to = float(weld_tag[1].split(':')[1].strip())
+    arc_weld = ofx.arSpecifiedArclengths(weld_from, weld_to)
 
-    # Stress and strain
+    # Bend moment, tension, strain
     ires = 0
-    var = 'Max pipelay von Mises strain'
-    for arc in [arc_ob, arc_st, arc_sb]:
-        static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
-        pipe_res[ires, 0] = static.max()
-        if dynamic_sim:
-            dyn = line.RangeGraph(var, 1, None, arc).Max
-            pipe_res[ires, 1] = dyn.max()
-        ires += 1
+    vars = ['Effective tension', 'Bend moment', 'Max pipelay von Mises strain']
+    for var in vars:
+        arcs = [arc_ob, arc_st, arc_sb]
+        arcs = arcs + [arc_weld] if var == 'Bend moment' else arcs
+        for arc in arcs:
+            static = line.RangeGraph(var, ofx.pnStaticState, None, arc).Mean
+            pipe_res[ires, 0] = static.max()
+            if dynamic_sim:
+                dyn = line.RangeGraph(var, 1, None, arc).Max
+                pipe_res[ires, 1] = dyn.max()
+            ires += 1
 
     # Modified vm strain only for overbend (if CWC)
+    # (Overwrite existing result)
     if ltype.CWC == 'Yes':
+        i_obstrain = 7
         bend_strain = line.RangeGraph(
             'Max bending strain', ofx.pnStaticState, None, arc_ob).Mean
         tensile_strain = line.RangeGraph(
@@ -322,7 +333,7 @@ def get_pipe_results(model: ofx.Model,
         hoop_strain = hoop_stress / youngs_mod
         mod_vm_strain = np.sqrt(worst_zz_strain**2 + hoop_strain**2 - 
                                 worst_zz_strain * hoop_strain)
-        pipe_res[0, 0] = mod_vm_strain.max()
+        pipe_res[i_obstrain, 0] = mod_vm_strain.max()
         if dynamic_sim:
             bend_strain = line.RangeGraph(
                 'Max bending strain', 1, None, arc_ob).Max
@@ -334,7 +345,7 @@ def get_pipe_results(model: ofx.Model,
             hoop_strain = hoop_stress / youngs_mod
             mod_vm_strain = np.sqrt(worst_zz_strain**2 + hoop_strain**2 - 
                                     worst_zz_strain * hoop_strain)
-            pipe_res[0, 1] = mod_vm_strain.max()
+            pipe_res[i_obstrain, 1] = mod_vm_strain.max()
 
     # For CWC, stresses are calculated from strains using Ramberg-Osgood curve
     var = 'Max von Mises stress'
@@ -427,7 +438,8 @@ def static_summary(outpath, datpaths: list[Path]) -> None:
 
         vname = stinger_ref.Connection
         ovessel = model[vname]
-        bollard_pull = ovessel.GlobalAppliedForceX[0]
+        # bollard_pull = ovessel.GlobalAppliedForceX[0]
+        bollard_pull = -ovessel.StaticResult('Connections GX force')
 
         # Pipe data
         line = model['Line1']
@@ -543,25 +555,30 @@ def static_summary(outpath, datpaths: list[Path]) -> None:
         ws.cell(istart + 9, icol).value = pipe_angles[0]
         ws.cell(istart + 10, icol).value = pipe_angles[1]
 
-        # Pipe stress and strain
+        # Pipe forces and moments
         for irow in range(7):
             val = pipe_res[irow, 0]
+            ws.cell(38 + irow, icol).value = val
+
+        # Pipe stress and strain
+        for irow in range(7):
+            val = pipe_res[irow + 7, 0]
             if irow in [3, 4, 5]:
                 val /= 1000  # Convert stresses to MPa
-            ws.cell(38 + irow, icol).value = val
+            ws.cell(47 + irow, icol).value = val
 
         # F101 code checks
         for irow in range(8):
-            ws.cell(47 + irow, icol).value = pipe_res[irow + 7, 0]
+            ws.cell(56 + irow, icol).value = pipe_res[irow + 14, 0]
 
         # Support loads
-        irow = 57
+        irow = 66
         for load in support_loads:
             ws.cell(irow, icol).value = load
             irow += 1
 
         # Roller depths
-        irow = 73
+        irow = 82
         for depth in roller_depths:
             ws.cell(irow, icol).value = depth
             irow += 1

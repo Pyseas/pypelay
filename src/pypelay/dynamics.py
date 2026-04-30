@@ -108,11 +108,15 @@ def make_sims(base_path: Path) -> None:
         'before', 'after', 'numseed', 'hmax', 'thmax', 'cross']
     df0.drop(drop_cols, axis=1, inplace=True)
 
-    dfs = []
-    for hs in df1['hs'].dropna():
-        df1['hs'] = hs
-        dfs.append(df1.copy())
-    df1 = pd.concat(dfs, ignore_index=True)
+    hs_list = df1['hs'].dropna().tolist()
+    dirn_list = df1['dirn'].dropna().tolist()
+    dname_list = df1['dirn_name'].dropna().tolist()
+
+    hs_dirn = []
+    for hs in hs_list:
+        for dirn, dname in zip(dirn_list, dname_list):
+            hs_dirn.append((hs, dirn, dname))
+    df1 = pd.DataFrame(hs_dirn, columns=['hs', 'dirn', 'dirn_name'])
 
     df0['join'] = 0
     df1['join'] = 0

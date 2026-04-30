@@ -359,8 +359,8 @@ def get_pipe_results(model: ofx.Model,
         else:
             ro = ltype.ram_osgd
             if ro:
-                static = np.interp(pipe_res[i, 0], ro.strain, ro.stress)
-                dyn = np.interp(pipe_res[i, 1], ro.strain, ro.stress)
+                static = np.interp(pipe_res[i + 7, 0], ro.strain, ro.stress)
+                dyn = np.interp(pipe_res[i + 7, 1], ro.strain, ro.stress)
             else:
                 static, dyn = 0.0, 0.0
         pipe_res[ires, 0] = static

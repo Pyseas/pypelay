@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [0.3.6] - 2026-04-30
+
+### Added
+
+### Changed
+- Bugfix: von Mises stress results were all zero
+
+### Removed
+
 ## [0.3.5] - 2026-04-28
 
 ### Added

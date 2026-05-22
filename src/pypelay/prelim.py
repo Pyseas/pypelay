@@ -131,6 +131,7 @@ def solve_configs(vessel: Vessel, radii: list[float]) -> None:
             inpath = PATH / 'base case.dat'
 
             water_depth = int(8000 / (radius/1000 - 73))
+            # water_depth = 1200
 
             tip_clearance = 0.2
 
@@ -204,7 +205,7 @@ def valid_configs_to_df(vessel: Vessel, radii: list[float]) -> None:
         stinger_config =
             radius, num_section, straight, transition, ang1, ang2'''
 
-    nconfig = len(radii) * 3
+    nconfig = len(radii) * 1
 
     model = get_base_case(vessel, radii[0], num_section=3)
     roller_cols = get_roller_cols(model)
@@ -213,7 +214,7 @@ def valid_configs_to_df(vessel: Vessel, radii: list[float]) -> None:
     icfg = 0
     configs = []
     for radius in radii:
-        for num_section in [1, 2, 3]:
+        for num_section in [3]:
             print(radius, num_section, f'{icfg + 1}/{nconfig}')
             # Create base case model
             model = get_base_case(vessel, radius, num_section)

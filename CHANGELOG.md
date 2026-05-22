@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [0.3.8] - 2026-05-22
+
+### Added
+- Added 75m and 80m radius configs (3 stinger sections only)
+
+### Changed
+
+### Removed
+
+
 ## [0.3.7] - 2026-04-30
 
 ### Added

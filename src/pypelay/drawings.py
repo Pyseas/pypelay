@@ -11,12 +11,26 @@ from importlib.resources import files
 __all__ = ['write_dxf']
 
 
-def pin_hole(y: float, ymin: float, yincr: float) -> str:
+def pin_hole(vessel_name: str, rname: str,
+             y: float, ymin: float, yincr: float) -> str:
     # Calculates roller pin hole (e.g. D-10) from roller height
+    rl_hole, st_hole = 'Z', -1
     ihole = round((y - ymin) / yincr)
-    roller_holes = ['A', 'B', 'C', 'D', 'E', 'F']
-    rl_hole = roller_holes[ihole % 6]
-    st_hole = ihole % 6 + int(ihole/6) + 1
+
+    if vessel_name in ['S1200', 'S3000']:
+        roller_holes = ['A', 'B', 'C', 'D', 'E', 'F']
+        rl_hole = roller_holes[ihole % 6]
+        st_hole = ihole % 6 + int(ihole/6) + 1
+
+    if vessel_name == 'S2000':
+        if rname[:2] =='SR':
+            st_hole = 9 + ihole
+            rl_hole = 'A'
+        if rname[:2] == 'BR':
+            sup_holes = [1, 5, 4, 3]
+            roller_holes = ['D', 'A', 'B', 'C']
+            rl_hole = roller_holes[ihole % 4]
+            st_hole = int(ihole/4) + sup_holes[ihole % 4]
 
     return f'{rl_hole}-{st_hole}'
 
@@ -39,7 +53,8 @@ def write_dxf_ga(datpath: Path) -> None:
     msp = doc.modelspace()
 
     # Insert stinger sections
-    for block_name in ['stinger_1', 'stinger_2', 'stinger_3']:
+    for isection in range(4):
+        block_name = f'stinger_{isection+1}'
         if f'b6 {block_name}' in all_names:
             buoy = model[f'b6 {block_name}']
             buoy.Connection = 'b6 stinger_ref'
@@ -50,24 +65,11 @@ def write_dxf_ga(datpath: Path) -> None:
                 block_name, (glob_x, glob_y),
                 dxfattribs={'rotation': r3, 'layer': 'STINGER'})
 
-    # Table top left corner (for stinger rollers)
-    tbl_x, tbl_y = 35169.52, 143297.41
-    row_ht, col_wd = 1860.22, 4662.38
-
-    # Input stinger angle in first row
-    text_x = tbl_x + 6 * col_wd
-    text_y = tbl_y - 0.5 * row_ht
-    ang1 = model['b6 stinger_1'].InitialRotation3
-    msp.add_text(f'{ang1:.1f}', height=680,
-        dxfattribs={'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
-        ).set_placement((text_x, text_y),
-                        align=TextEntityAlignment.MIDDLE_CENTER)
-
+    # Insert roller blocks
     barge_rlr_names = [x[3:] for x in all_names if x[:5] == 'b6 BR']
     stinger_rlr_names = [x[3:] for x in all_names if x[:5] == 'b6 SR']
     rlr_names = barge_rlr_names + stinger_rlr_names
 
-    # Insert roller blocks
     for rname in rlr_names:
         if rname[:1] == 'B':
             block_name = 'barge_roller'
@@ -83,18 +85,24 @@ def write_dxf_ga(datpath: Path) -> None:
             block_name, (glob_x, glob_y),
             dxfattribs={'rotation': r3, 'layer': 'ROLLER'})
 
+    # TABLE TEXT
     text_attribs = {'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
 
-    # Barge roller table text
-    for irlr, rname in enumerate(barge_rlr_names):
-        cn = model[f'cn {rname}']
-        y = round(cn.InitialY * 1000)
-        text_x = 29770 + irlr * 5860
-        text_y = 107656
-        msp.add_text(f'{y}', height=680,
-            dxfattribs=text_attribs
-            ).set_placement((text_x, text_y),
-                            align=TextEntityAlignment.MIDDLE_CENTER)
+    # STINGER ROLLERS
+    tbl_x, tbl_y = 35169.52, 143297.41
+    row_ht, col_wd, ncol = 1860.22, 4662.38, 12
+    if vessel_name == 'S2000':
+        tbl_x, tbl_y = 35000, 123780
+        row_ht, col_wd, ncol = 1860, 5200, 8
+
+    # Input stinger angle in first row
+    text_x = tbl_x + ncol * col_wd / 2
+    text_y = tbl_y - 0.5 * row_ht
+    ang1 = model['b6 stinger_1'].InitialRotation3
+    msp.add_text(f'{ang1:.1f}', height=680,
+        dxfattribs={'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
+        ).set_placement((text_x, text_y),
+                        align=TextEntityAlignment.MIDDLE_CENTER)
 
     # Stinger roller labels and table text
     for irlr, rname in enumerate(stinger_rlr_names):
@@ -104,7 +112,7 @@ def write_dxf_ga(datpath: Path) -> None:
         y = round(cn.InitialY * 1000)
         ymin = float(buoy.tags['ymin']) * 1000
         yincr = float(buoy.tags['yincr']) * 1000
-        rl_hole, st_hole = pin_hole(y, ymin, yincr).split('-')
+        rl_hole, st_hole = pin_hole(vessel_name, rname, y, ymin, yincr).split('-')
         buoy.Connection = cn.InFrameConnection
         buoy.InitialY = 0
         buoy.InitialRotation3 = 0
@@ -113,6 +121,8 @@ def write_dxf_ga(datpath: Path) -> None:
         origin_y = buoy.InitialY * 1000
         post_angle = math.radians(buoy.InitialRotation3 - 90)
         label_offset = 800
+        if vessel_name == 'S2000' and irlr > 1:
+            label_offset += 2025
         label_x = origin_x + label_offset * math.cos(post_angle)
         label_y = origin_y + label_offset * math.sin(post_angle)
         text = f'SR #{rname[2:]}'
@@ -121,16 +131,37 @@ def write_dxf_ga(datpath: Path) -> None:
             ).set_placement((label_x, label_y),
                             align=TextEntityAlignment.TOP_LEFT)
         # Table text
+        if vessel_name == 'S2000':
+            y += (1500 - ymin)
         text_x = tbl_x + (irlr + 0.5) * col_wd
         text_y = tbl_y - 1.5 * row_ht
-        for text in [f'{y}', st_hole, rl_hole]:
+        for text in [f'{y:.0f}', st_hole, rl_hole]:
             msp.add_text(text, height=680,
                 dxfattribs=text_attribs
                 ).set_placement((text_x, text_y),
                                 align=TextEntityAlignment.MIDDLE_CENTER)
             text_y -= row_ht
 
-    # Add BOP profile
+    # BARGE ROLLERS
+    # Values for S1200 and S3000
+    x0, y0, col_width = 29770, 107656, 5860
+    if vessel_name == 'S2000':
+        x0, y0, col_width = 26350, 90930, 5200
+    for irlr, rname in enumerate(barge_rlr_names):
+        cn = model[f'cn {rname}']
+        buoy = model[f'b6 {rname}']
+        y = round(cn.InitialY * 1000)
+        if vessel_name == 'S2000':
+            ymin = float(buoy.tags['ymin']) * 1000
+            y += (1375 - ymin)
+        text_x = x0 + irlr * col_width
+        text_y = y0
+        msp.add_text(f'{y:.0f}', height=680,
+            dxfattribs=text_attribs
+            ).set_placement((text_x, text_y),
+                            align=TextEntityAlignment.MIDDLE_CENTER)
+
+    # BOP PROFILE
     # Reopen model since the roller positions in the first one are all messed up
     model = ofx.Model(datpath)
     line = model['Line1']
@@ -167,6 +198,9 @@ def write_dxf_rollers(datpath: Path) -> None:
     stinger_ref = model['b6 stinger_ref']
     vessel_name = stinger_ref.Connection[2:]
 
+    # if vessel_name == 'S2000':
+    #     return
+
     all_names = [obj.Name for obj in model.objects]
     roller_names = [x[3:] for x in all_names if x[:5] == 'b6 SR']
     nrlr = len(roller_names)
@@ -187,12 +221,16 @@ def write_dxf_rollers(datpath: Path) -> None:
     rl_insert = [0] * nrlr
     st_insert = [0] * nrlr
     txt = ''
+    xbox, ybox = 7500, 10000
+    if vessel_name == 'S2000':
+        xbox, ybox = 5000, 5000
+
     for ref in msp.query('INSERT[name=="A3 - TAGG"]'):
         x, y, _ = ref.dxf.insert
         txt = ref.get_attrib('1').dxf.text
         for irlr in range(nrlr):
             xbase, ybase = base_points[irlr, :]
-            if (0 < x - xbase < 7500) and (0 < y - ybase < 10000):
+            if (0 < x - xbase < xbox) and (0 < y - ybase < ybox):
                 if txt.isnumeric():
                     st_insert[irlr] = ref
                 else:
@@ -204,7 +242,7 @@ def write_dxf_rollers(datpath: Path) -> None:
         x, y, _ = ref.vertices[0]
         for irlr in range(nrlr):
             xbase, ybase = base_points[irlr, :]
-            if (0 < x - xbase < 7500) and (0 < y - ybase < 10000):
+            if (0 < x - xbase < xbox) and (0 < y - ybase < ybox):
                 leaders[irlr] = ref
 
     for roller_name in roller_names:
@@ -212,15 +250,15 @@ def write_dxf_rollers(datpath: Path) -> None:
         base_point = base_points[irlr]
         oroller = model['b6 ' + roller_name]
         ocn = model['cn ' + roller_name]
-        ymin = float(oroller.tags['ymin'])
-        yincr = float(oroller.tags['yincr'])
-        y = ocn.InFrameInitialY
+        ymin = float(oroller.tags['ymin']) * 1000
+        yincr = float(oroller.tags['yincr']) * 1000
+        y = ocn.InFrameInitialY * 1000
         # Insert roller
         rlr_x = base_point[0]
-        rlr_y = base_point[1] + y * 1000
+        rlr_y = base_point[1] + y
         msp.add_blockref('SR1_front', (rlr_x, rlr_y))
         # Update labels
-        pin = pin_hole(y, ymin, yincr)
+        pin = pin_hole(vessel_name, roller_name, y, ymin, yincr)
         rl_txt, st_txt = pin.split('-')
         attrib = rl_insert[irlr].get_attrib('1')
         attrib.dxf.text = rl_txt
@@ -230,19 +268,29 @@ def write_dxf_rollers(datpath: Path) -> None:
         leader = leaders[irlr]
         st_hole = int(st_txt) - 1
         # Hard-coded values here ****
-        y_hole = (ymin * 1000 - 646) + 180 * st_hole
+        y_hole = (ymin - 646) + 180 * st_hole
+        if vessel_name == 'S2000':
+            y_hole = y + 322
         verts = leader.vertices
         arw_x, arw_y, _ = verts[0]
         verts[0] = (arw_x, base_point[1] + y_hole, 0)
         leader.set_vertices(verts)
         # Add value to table
+        text_ht = 340
         if irlr < 7:
             text_x, text_y = (29895.94, -43171.45)
             text_y += -800 * irlr
         else:
             text_x, text_y = (97273.88, -24851.87)
             text_y += -800 * (irlr - 7)
-        msp.add_text(f'{y:.3f}', height=340,
+        if vessel_name == 'S2000':
+            text_x = 8125
+            text_y = -14000 - 400*irlr 
+            text_ht = 170
+        
+        if vessel_name == 'S2000':
+            y += (1500 - ymin)
+        msp.add_text(f'{y/1000:.3f}', height=text_ht,
             dxfattribs={'style': 'ROMANS', 'layer': 'DIM', 'color': 2}
             ).set_placement((text_x, text_y), align=TextEntityAlignment.MIDDLE_CENTER)
 

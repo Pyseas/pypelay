@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [0.3.9] - 2026-06-20
+
+### Added
+- Added S2000 GA and roller drawings
+
+### Changed
+
+### Removed
+
+
 ## [0.3.8] - 2026-05-22
 
 ### Added
